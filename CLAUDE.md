@@ -34,7 +34,13 @@
 - Pictures: lossless WebP, tight square, 116x116 for icons (crop spec in the user's entry save point).
 
 ## Current state (VERIFIED 2026-11-04)
-- src/ = v151 (built file Bb2dungeon-ESv4v151.html). NOT approved yet (v149, v150 neither). Last approval on record = v132.
+- src/ = v152 (built file Bb2dungeon-ESv4v152.html). NOT approved yet. v151 APPROVED by the user 2026-11-04 ("Very good",
+  add-on approach) = tests/golden.json baseline now (recorded from v151, 203 questions).
+  v152 = v151 + names typed without 's ("bianca staff"), A-or-B for a main stat ("... for int"), where EACH item drops
+  ("queens dress and tsukuyomi"), item by boss type ("which conquest drops ray gun"), honest "strongest" card,
+  place counts, "how to get 7 star items" from the tables, index "Conquests (23)" with Land Devourer (C4 fixed).
+  Wording: items only in special rows are "listed under a special dungeon"; Crystal Beach is never counted as a
+  source of gear or skills (it drops only its Loot). Test vs v151: 5 changed = 1 add-on + 4 wording, nothing lost.
   v151 = v150 in ADD-ON mode: 15 of 17 core plans now wait for the old answer and add their card on top (runs maths and
   the gibberish card still replace); same-title cards: the old one always stays; supplement cards ("More about Burn")
   go below; bare_snap (43) ignores core cards when it records the subject, so "it" follow-ups stay right.
@@ -62,7 +68,7 @@
 - Core rule learned: the core must only step in when the old answer is worse; check engineOK / __qaUnderstood first
   ("tips to survive" and "which skills give haste" were wrongly caught once and fixed).
 - Phone-speed test (CPU slowed 4x): first paint 0.9 s, fully loaded 7.4 s, Ask answers 0.3-0.6 s.
-- Known gap: the index "Conquests (22)" is missing Land Devourer (table has 23). Not fixed yet.
+- C4 FIXED in v152: the index says "Conquests (23)" and lists Land Devourer.
 
 ## Plan (do ONE, hand over, ask before the next)
 - P1 DONE 2026-11-04: split into src/ + build.py (byte-identical) + test bank.

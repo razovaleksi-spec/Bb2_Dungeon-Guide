@@ -38,7 +38,9 @@ function index(){if(IX)return IX;
         var key=N(n)+'|'+s,it=items[key];
         if(!it){it=items[key]={name:n,slot:s,stars:{},at:[]};}
         it.stars[k?7:6]=1;it.at.push({p:p,star:k?7:6});});});});});});
-  function add(name,kind,ref){var n=N(name);if(n.length<3)return;names.push({n:n,name:name,kind:kind,ref:ref});}
+  function add(name,kind,ref){var n=N(name);if(n.length<3)return;names.push({n:n,name:name,kind:kind,ref:ref});
+    /* v152: names typed without the possessive 's ("bianca staff", "queens dress") are found too */
+    if(/['\u2019]s\b/.test(name)){var n2=N(name.replace(/['\u2019]s\b/g,''));if(n2.length>=3&&n2!==n)names.push({n:n2,name:name,kind:kind,ref:ref});}}
   places.forEach(function(p){add(p.name,'place',p);});
   Object.keys(items).forEach(function(k){add(items[k].name,'item',items[k]);});
   Object.keys(ITEM_DETAILS).forEach(function(k){var n=k.replace(/::(weapon|armor|accessory|skill)$/,'');if(!names.some(function(x){return x.kind==='item'&&x.n===N(n);}))add(n,'item',{name:n,slot:'',stars:{},at:[]});});
@@ -92,7 +94,7 @@ function chips(list){return list.length?'<div class="qa-ex">'+list.map(function(
 function itemChip(it,star){var s=star||(it.stars&&it.stars[7]?7:6);return '<span class="item qa-chip s'+s+'" data-item="'+E(it.name)+'" data-slot="'+E(it.slot||'')+'">'+E(it.name)+'</span>';}
 function placeChip(p){return '<a href="#" class="idx-link qa-chip qa-boss" data-q="'+E(p.name)+'">'+E(p.name)+'</a>';}
 function where(it){var real=it.at.filter(function(a){return a.p.type!=='Special';});
-  if(!real.length)return it.at.length?'special dungeon only':'not in the drop tables';
+  if(!real.length)return it.at.length?'special dungeon list only':'not in the drop tables';
   return real.slice(0,2).map(function(a){return E(a.p.name);}).join(', ')+(real.length>2?' +'+(real.length-2):'');}
 function pctS(x){return x>=99.95?'over 99.9':x<0.05?'under 0.1':(Math.round(x*10)/10).toString();}
 
@@ -143,12 +145,15 @@ function farmAsk(){return card('Where to farm','I read this as: where should I f
 /* e. A or B for a goal: the old compare card + what each one has for that goal */
 var TANK=/shield|resist|max hp|hp stack|parry|guts|armor|barrier|protection|defen|evasion|toughness/i;
 function cmpCard(u,its){var a=its[0].name,b=its[1].name,html=ask('compare '+a+' and '+b);if(!html||FAIL.test(html))return null;
-  if(u.goal!=='tank')return html;
-  var c=[a,b].map(function(n){return {n:n,h:lines(n).filter(function(l){return TANK.test(l.n)||TANK.test(l.d);}).map(function(l){return l.n;})};});
-  var h=lead('Tank stats on each (from the guide’s tooltips):')+c.map(function(x){return line('<b>'+E(x.n)+'</b> · '+(x.h.length?x.h.map(E).join(', '):'none')+' <span class="qa-sub">('+x.h.length+')</span>');}).join('');
-  h+=note(c[0].h.length===c[1].h.length?'Same number of tank stats; the values are hidden in the tooltips (+??), so pick by the stats you need.':
-    E((c[0].h.length>c[1].h.length?c[0]:c[1]).n)+' has more tank stats. The values are hidden in the tooltips (+??), so this is a count, not a full verdict.');
-  return card('For a tank: '+E(a)+' or '+E(b),'tank check',h,'cmp')+html;}
+  /* v152: the goal can be a tank OR a main stat ("lord of demons or bianca staff for int") */
+  var GOAL=u.goal==='tank'?TANK:u.stat?new RegExp(MAIN[u.stat]+'|'+u.stat+' Mastery|Almighty','i'):null,gname=u.goal==='tank'?'tank':u.stat;
+  if(!GOAL)return html;
+  var c=[a,b].map(function(n){return {n:n,h:lines(n).filter(function(l){return GOAL.test(l.n)||GOAL.test(l.d);}).map(function(l){return l.n;}).filter(function(x,i,arr){return arr.indexOf(x)===i;})};});
+  var h=lead(E(gname.charAt(0).toUpperCase()+gname.slice(1))+' stats on each (from the guide\u2019s tooltips):')+c.map(function(x){return line('<b>'+E(x.n)+'</b> \u00b7 '+(x.h.length?x.h.map(E).join(', '):'none')+' <span class="qa-sub">('+x.h.length+')</span>');}).join('');
+  h+=note(c[0].h.length===c[1].h.length?'Same number of '+E(gname)+' stats; the values are hidden in the tooltips (+??), so pick by the stats you need.':
+    E((c[0].h.length>c[1].h.length?c[0]:c[1]).n)+' has more '+E(gname)+' stats. The values are hidden in the tooltips (+??), so this is a count, not a full verdict.');
+  var who=u.goal==='tank'?'a tank':({STR:'an STR',DEX:'a DEX',INT:'an INT',PIE:'a PIE'}[gname])+' build';
+  return card('For '+who+': '+E(a)+' or '+E(b),E(gname)+' check',h,'cmp')+html;}
 /* f. "is X good": what its stats point to + its card + where it drops */
 var TAGS=[['tank',TANK],['physical damage',/^(?!.*resist).*physical/i],['magic damage',/^(?!.*resist).*magical/i],['STR build',/STRength|STR Mastery|Almighty/i],['DEX build',/DEXterity|DEX Mastery|Almighty/i],['INT build',/INTelligence|INT Mastery|Almighty/i],['PIE build',/PIEty|PIE Mastery|Almighty/i],['healing',/heal/i],
   ['crit',/crit/i],['burn',/burn/i],['frostbite',/frost/i],['electric',/electri|thunder|lightning/i],['poison',/poison/i],['bleed',/bleed/i],['summons',/summon|minion/i],
@@ -157,7 +162,7 @@ function goodCard(u,it){var ls=lines(it.name);var tags=TAGS.filter(function(t){r
   var eff=ask('what does '+it.name+' do');if(FAIL.test(eff))eff='';
   var real=it.at.filter(function(a){return a.p.type!=='Special';}),sp=it.at.length&&!real.length;
   var h=lead(tags.length?'Its stats point to: <b>'+tags.slice(0,5).map(E).join(', ')+'</b>.':'Its stats do not point to one clear build.')+
-    (it.at.length?line('<span class="qa-lab">Where</span> '+(sp?'only in a special dungeon (Crystal Beach, Trial)':real.slice(0,4).map(function(a){return placeChip(a.p);}).join('')+(real.length>4?' +'+(real.length-4)+' more':''))):'')+
+    (it.at.length?line('<span class="qa-lab">Where</span> '+(sp?'only listed under a special dungeon (Crystal Beach, Trial)':real.slice(0,4).map(function(a){return placeChip(a.p);}).join('')+(real.length>4?' +'+(real.length-4)+' more':''))):'')+
     note('The guide has no ratings, so "good" depends on your build. This reading comes from its stats and abilities.');
   return card('Is '+E(it.name)+' good?','read from its stats',h,'good')+eff;}
 /* g. "max / cap" of a stat: lead with the number from its own tooltip */
@@ -221,7 +226,7 @@ function rarestCard(u){var ix=index(),asc=!/\b(most common|commonest|most bosses
   var h=top.length?lead((asc?'Fewest':'Most')+' boss rows: <b>'+top[0].n+'</b>.')+line(top.slice(0,10).map(function(r){return itemChip(r.it,r.s);}).join('')+(top.length>10?' +'+(top.length-10)+' more':'')):'';
   var next=rows.filter(function(r){return r.n!==(top[0]&&top[0].n);}).slice(0,6);
   if(next.length)h+=line('<span class="qa-lab">Next</span> '+next.map(function(r){return itemChip(r.it,r.s)+' <span class="qa-sub">'+r.n+'</span>';}).join(' '));
-  if(asc&&sp.length)h+=line('<span class="qa-lab">Only in special dungeons</span> '+sp.slice(0,8).map(function(it){return itemChip(it,7);}).join('')+(sp.length>8?' +'+(sp.length-8)+' more':''));
+  if(asc&&sp.length)h+=line('<span class="qa-lab">Only listed under special dungeons</span> '+sp.slice(0,8).map(function(it){return itemChip(it,7);}).join('')+(sp.length>8?' +'+(sp.length-8)+' more':''));
   h+=note('Counted from the drop tables: how many dungeon, disaster and conquest rows list each one. The tables do not give drop chances.');
   return card((asc?'Rarest ':'Most common ')+E(what),'by number of boss rows',h,'rare');}
 /* m. which place is best for N-star <slot>: rank the rows; say so when they are all equal */
@@ -265,6 +270,36 @@ var CHAT=/^(hi|hello|hey|yo|sup|hiya|ok|okay|k|lol|lmao|haha|thanks?|thx|ty|bye|
 function unknownCard(u){var ex=[['Where does Tsukuyomi drop?','Where does Tsukuyomi drop?'],['Best weapon for INT build','Best weapon for INT build'],['What does Burn do?','What does Burn do?'],['What should I farm?','What should I farm?']];
   return card('Not in the guide','no match',lead('I could not find <b>'+E(u.raw.trim())+'</b> in the guide.')+line('Try the name of an item, skill, boss, dungeon or stat, or tap one:')+chips(ex),'unknown');}
 
+/* ===== v152 ===== */
+/* q. "where do I get A and B": where EACH one drops (the old card only says whether one boss has both) */
+function placesOf(it,types){var real=it.at.filter(function(a){return a.p.type!=='Special'&&(!types||types.indexOf(a.p.type)>=0);});
+  var seen={},l=[];real.forEach(function(a){if(!seen[a.p.name]){seen[a.p.name]=1;l.push(a.p);}});return l;}
+function eachWhereCard(u,its){var h=its.slice(0,4).map(function(x){var it=x.ref,ps=placesOf(it,null),sp=it.at.some(function(a){return a.p.type==='Special';});
+    return line(itemChip(it)+' '+(ps.length?ps.slice(0,6).map(placeChip).join('')+(ps.length>6?' +'+(ps.length-6)+' more':''):'')+(sp?' <span class="qa-sub">'+(ps.length?'+ ':'')+'listed under a special dungeon (Crystal Beach, Trial)</span>':'')+(!ps.length&&!sp?' <span class="qa-sub">not in the drop tables</span>':''));}).join('');
+  return card('Where each one drops','from the drop tables',lead('Each item on its own:')+h,'each');}
+/* r. "which conquest drops Ray Gun": only that kind of boss first */
+function typeWhereCard(u,it,types){var ps=placesOf(it,types),all=placesOf(it,null),nm=types.map(function(t){return t.toLowerCase()+'s';}).join(' and ');
+  var h=ps.length?lead('<b>'+ps.length+'</b> '+E(ps.length===1?nm.replace(/s$/,''):nm)+(ps.length===1?' drops ':' drop ')+E(it.name)+':')+line(ps.map(placeChip).join(''))
+    :lead('No '+E(nm.replace(/s$/,''))+' drops '+E(it.name)+'.')+(all.length?line('<span class="qa-lab">It drops in</span> '+all.slice(0,6).map(placeChip).join('')):line('It is only listed under a special dungeon (Crystal Beach, Trial).'));
+  return card(E(it.name)+': '+E(nm),'from the drop tables',h,'typewhere');}
+/* s. "strongest / most powerful": the guide hides the numbers, say so, then point to the build lists */
+function strongCard(u){var sl=u.slots.length&&u.slots.length<3?u.slots.map(function(s){return SLN[s].toLowerCase();}).join(' / '):'gear';
+  return card('Strongest '+E(sl),'what the guide can say',lead('The guide cannot rank raw strength: in-game tooltips hide the numbers (+??), and values change with level and rerolls.')+
+    line('What it can do: the best pieces for YOUR build. Pick one:')+chips([['STR build','Best '+(sl==='gear'?'gear':sl)+' for STR build'],['DEX build','Best '+(sl==='gear'?'gear':sl)+' for DEX build'],['INT build','Best '+(sl==='gear'?'gear':sl)+' for INT build'],['PIE build','Best '+(sl==='gear'?'gear':sl)+' for PIE build'],['Tank','Best '+(sl==='gear'?'armor':sl)+' for a tank']]),'strong');}
+/* t. "how many dungeons / bosses are there": plain counts from the tables */
+function countPlacesCard(){var c={Dungeon:0,Disaster:0,Conquest:0,Special:0};index().places.forEach(function(p){c[p.type]++;});
+  return card('How many places','from the tables',lead('<b>'+c.Dungeon+'</b> dungeons, <b>'+c.Disaster+'</b> disasters, <b>'+c.Conquest+'</b> conquests and <b>'+c.Special+'</b> special dungeons ('+(c.Dungeon+c.Disaster+c.Conquest)+' boss rows plus the special ones).')+
+    chips([['List the dungeons','list all dungeons'],['List the disasters','list all disasters'],['List the conquests','list all conquests']]),'count');}
+/* u. "how do I get 7 star items": what the drop tables say about stars */
+function getStarsCard(u){var ix=index(),st=u.stars.length?u.stars[0]:7,rows=ix.places.filter(function(p){return p.type!=='Special';}),per={};
+  rows.forEach(function(p){var n=SLOTS.reduce(function(s,sl){return s+p.cells[sl][st===7?1:0].length;},0);per[n]=(per[n]||0)+1;});
+  var sp=ix.places.filter(function(p){return p.type==='Special'&&p.name!=='Crystal Beach';}) /* Crystal Beach drops only its Loot (user rule) */.map(function(p){return {p:p,n:SLOTS.reduce(function(s,sl){return s+p.cells[sl][st===7?1:0].length;},0)};}).filter(function(x){return x.n;});
+  var ks=Object.keys(per).sort(function(a,b){return b-a;});
+  var h=lead('From the drop tables: '+ks.map(function(k){return '<b>'+per[k]+'</b> boss row'+(per[k]===1?'':'s')+' list <b>'+k+'</b> '+st+'★ item'+(k==='1'?'':'s');}).join(', ')+'.')+
+    (sp.length?line('<span class="qa-lab">Special dungeons</span> '+sp.map(function(x){return placeChip(x.p)+' <span class="qa-sub">'+x.n+' at '+st+'★</span>';}).join(' ')):'')+
+    note('Each boss row lists which '+st+'★ items it can drop; the tables do not give the chance.');
+  return card('Getting '+st+'★ items','from the drop tables',h,'getstars')+chips([['What does the Trial drop?','What does the Trial drop?'],['What is Savage mode?','What is Savage mode?'],['Rarest '+st+'★ weapon','What is the rarest '+st+' star weapon']]);}
+
 function plan(raw,prev){var u=understand(raw),it=u.kinds('item'),pl=u.kinds('place'),t=u.t;
   var gearish=it.filter(function(x){return x.ref&&(x.ref.slot||detail(x.name));});
   if(u.pct&&!pl.length&&!it.length&&/\b(runs?|tries|attempts|kills|clears|times|farm|how many|how long|chance|odds)\b/.test(t))return {u:u,own:function(){return runsCard(u);}};
@@ -304,6 +339,13 @@ function plan(raw,prev){var u=understand(raw),it=u.kinds('item'),pl=u.kinds('pla
   if(u.stat&&!it.length&&!pl.length&&!/\b(what is|what does|whats|mean|means)\b/.test(t)){
     if(/\b(build|gear|weapons?|armou?rs?|accessor(?:y|ies)|equipment|items?)\b/.test(t)&&!engineOK(u.fixed))return {u:u,aug:1,own:function(){return statCard(u,false);}};}
   if(/\b(farm|farming|grind|grinding)\b/.test(t)&&!u.names.length&&!u.stat&&!u.goal&&!u.stars.length&&!u.slots.length&&/\b(what|where|which|should)\b/.test(t))return {u:u,aug:1,own:farmAsk};
+  /* v152 add-ons */
+  var tw=[];if(/\bdungeons?\b/.test(t))tw.push('Dungeon');if(/\bdisasters?\b/.test(t))tw.push('Disaster');if(/\bconquests?\b/.test(t))tw.push('Conquest');
+  if(it.length>=2&&!u.cmp&&/\band\b/.test(t)&&/\b(where|get|drops?|farm|find)\b/.test(t))return {u:u,aug:1,own:function(){return eachWhereCard(u,it);}};
+  if(it.length===1&&!pl.length&&tw.length&&it[0].ref&&it[0].ref.at&&/\b(which|what|where|any)\b/.test(t)&&/\b(drops?|has|have|get|gives?)\b/.test(t))return {u:u,aug:1,own:function(){return typeWhereCard(u,it[0].ref,tw);}};
+  if(!it.length&&!pl.length&&!/\b(jobs?|races?|origins?|class|classes|skills?|contracts?|runes?)\b/.test(t)&&/\b(strongest|most powerful|best overall|overpowered|highest damage)\b/.test(t))return {u:u,aug:1,own:function(){return strongCard(u);}};
+  if(!it.length&&!pl.length&&!u.stars.length&&!u.slots.length&&/\bhow many (dungeons|disasters|conquests|bosses|places|special dungeons)\b/.test(t))return {u:u,aug:1,own:countPlacesCard};
+  if(!it.length&&!pl.length&&u.stars.length&&/\bhow (?:do i|to|can i|do you) (?:get|find|farm|obtain)\b/.test(t))return {u:u,aug:1,own:function(){return getStarsCard(u);}};
   if(gearish.length>=2&&u.cmp&&!/\bcompare\b/.test(t))return {u:u,aug:1,own:function(){return cmpCard(u,gearish);}};
   if(gearish.length===1&&it.length===1&&/^(is|are)\b/.test(t)&&/\b(good|worth|strong|useful|decent|bad|op|any good)\b/.test(t))return {u:u,aug:1,own:function(){return goodCard(u,gearish[0].ref.slot?gearish[0].ref:{name:gearish[0].name,slot:'',stars:{},at:[]});}};
   if(/\b(max|maximum|cap|capped|limit|at most|upper limit|highest)\b/.test(t)&&!/\b(gear|items?|equipment|where|get|drops?|which)\b/.test(t)&&(/\bhp stacks?\b/.test(t)||u.names.some(function(x){return x.kind==='stat'||x.kind==='term';}))&&!it.length)return {u:u,aug:1,own:function(q){u.q=q;return maxCard(u);}};

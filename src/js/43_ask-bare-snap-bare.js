@@ -4,7 +4,7 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return
 var BARE=/^\s*(?:(?:and|but|so)\s+)?(why not|why so|why though|why is that|how come|how so|what for|what about it|why|how many|how much|how|what|when|where|who|which)\s*[?.!]*\s*$/i;
 var BAGS={};function pick(k,a){var b=BAGS[k];if(!b||!b.length){b=BAGS[k]=a.map(function(_,i){return i;});for(var i=b.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1)),t=b[i];b[i]=b[j];b[j]=t;}}return a[b.pop()];}
 var last=window.QA.state.answer;
-function snap(){if(out.querySelector('[data-bare],[data-aw]'))return;var t=out.querySelector('.qa-title');
+function snap(){if(out.querySelector('[data-bare],[data-aw]'))return;var t=out.querySelector('.qa-card:not([data-core2]) .qa-title'); /* v151: an Ask core v2 card is an add-on, not the answer's subject */
   if(!t){var nt=out.querySelector('.qa-card > .qa-note');var nx=nt?nt.textContent.split(' \u00b7 ')[0].replace(/[?!.\s]+$/,'').trim():'';if(nx&&nx.length<=60&&!/^(Understood as|I read this|What I understood|Tell me a bit more)/i.test(nx)&&!out.querySelector('.qa-title')){last.topic=nx;last.name=nx.split(':')[0].trim();last.kind='rules';last.why='';}return;}
   if(/Tell me a bit more|Outside this guide/.test(t.textContent))return;
   var n=t.firstChild;var tp=((n&&n.textContent)||'').trim().slice(0,60);last.topic=/^Built for:/.test(tp)?tp.replace(/^Built for:\s*/,'the ')+' build':tp;last.why='';

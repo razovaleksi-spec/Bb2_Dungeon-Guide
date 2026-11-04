@@ -20,6 +20,9 @@
 - The download must stay ONE offline html with every picture inside (build.py does this).
 - GitHub is the ONLY home of the guide (user deleted the Vercel page 2026-11-04; do not mention Vercel again).
 - User rule (2026-11-04): free to add new code when it makes the html or the offline Ask box work better / smarter / more aware.
+- User rule (2026-11-04, after reading the old/new log): NEVER make an answer less informative. New Ask box parts ADD to the
+  old answer (old answer stays complete, the new card goes on top, then "Also in the guide:"); replace only a real failure
+  (no match, chat filler) or an answer about something else. Prove it: every old answer line must still be there.
 
 ## How to make a change (every time)
 1. Edit files in src/ (data in src/js/main/, Ask box features in src/js/, pictures in src/img/).
@@ -31,7 +34,13 @@
 - Pictures: lossless WebP, tight square, 116x116 for icons (crop spec in the user's entry save point).
 
 ## Current state (VERIFIED 2026-11-04)
-- src/ = v150 (built file Bb2dungeon-ESv4v150.html). NOT approved yet (v149 neither). Last approval on record = v132.
+- src/ = v151 (built file Bb2dungeon-ESv4v151.html). NOT approved yet (v149, v150 neither). Last approval on record = v132.
+  v151 = v150 in ADD-ON mode: 15 of 17 core plans now wait for the old answer and add their card on top (runs maths and
+  the gibberish card still replace); same-title cards: the old one always stays; supplement cards ("More about Burn")
+  go below; bare_snap (43) ignores core cards when it records the subject, so "it" follow-ups stay right.
+  Test vs v148: 0 page errors, 0 name readings changed, 24 answers changed: 15 keep ALL old lines + add new,
+  6 random chat wording, 3 old non-answers replaced (1% runs boss table, asdkjh chat filler, "what about 6 star"
+  now follows the question just before it). 0 answers lost old information.
   v150 = v149 + Ask core filter engine (stat/ability + stars + slot + place + "is there any"), rarest / most common,
   best place for N-star slot, races / jobs / origins by stat or for a tank, which places have a dungeon status,
   plain "Not in the guide" card for gibberish, player view (src/js/57_player-view.js hides test panels;

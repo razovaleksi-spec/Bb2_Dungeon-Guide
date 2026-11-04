@@ -175,7 +175,7 @@ function craftCard(u,q){var rest=full(q||u.fixed);
 function termCard(u,tm,q){var base=full(q||u.fixed);if(!base||FAIL.test(base))return null;var w=N(tm.name);
   var rel=Object.keys(STATS).filter(function(k){return (' '+N(k)+' ').indexOf(' '+w+' ')>=0;}).slice(0,6);
   if(!rel.length)return null;
-  return base+card('More about '+E(tm.name),'related in the guide',lead('Stats that change '+E(tm.name)+':')+chips(rel.map(function(k){return [k,'Which items give '+k+'?'];}))+
+  return base+card('More about '+E(tm.name),'related in the guide (end)',lead('Stats that change '+E(tm.name)+':')+chips(rel.map(function(k){return [k,'Which items give '+k+'?'];}))+
     note('Want to avoid it instead?')+chips([['How do I resist '+tm.name+'?','How do I resist '+tm.name]]),'term');}
 /* j. "what is good against <boss>": say what the guide cannot know, then what it has */
 function againstCard(u,p){var base=full(p.name);
@@ -268,7 +268,7 @@ function unknownCard(u){var ex=[['Where does Tsukuyomi drop?','Where does Tsukuy
 function plan(raw,prev){var u=understand(raw),it=u.kinds('item'),pl=u.kinds('place'),t=u.t;
   var gearish=it.filter(function(x){return x.ref&&(x.ref.slot||detail(x.name));});
   if(u.pct&&!pl.length&&!it.length&&/\b(runs?|tries|attempts|kills|clears|times|farm|how many|how long|chance|odds)\b/.test(t))return {u:u,own:function(){return runsCard(u);}};
-  if(u.neg&&u.slots.length&&!pl.length&&!it.length&&/\b(which|what|any|list|show)\b/.test(t)&&/\b(dungeons?|disasters?|conquests?|bosses?|places?|where)\b/.test(t))return {u:u,own:function(){return noneCard(u);}};
+  if(u.neg&&u.slots.length&&!pl.length&&!it.length&&/\b(which|what|any|list|show)\b/.test(t)&&/\b(dungeons?|disasters?|conquests?|bosses?|places?|where)\b/.test(t))return {u:u,aug:1,own:function(){return noneCard(u);}};
   /* v150: gibberish (no word the guide knows) -> a plain "not in the guide" card instead of chat filler */
   var ws=t.split(' ').filter(function(w){return w.length>1;});
   if(ws.length&&ws.length<=5&&!u.names.length&&!u.stat&&!u.stars.length&&!u.slots.length&&!u.pct&&!ws.some(function(w){return CHAT.test(w);})&&W.__qaKnown&&ws.every(function(w){try{return !W.__qaKnown(w);}catch(e){return false;}})&&!engineOK(u.fixed)&&!(function(){try{return W.__qaUnderstood&&W.__qaUnderstood(u.fixed);}catch(e){return false;}})())return {u:u,own:function(){return unknownCard(u);}};
@@ -282,15 +282,15 @@ function plan(raw,prev){var u=understand(raw),it=u.kinds('item'),pl=u.kinds('pla
       q=SW.test(q)?q.replace(SW,sw):/\bdrops?\b/i.test(q)?q.replace(/\bdrops?\b/i,sw+' drop'):q+' '+sw;}
     return {u:u,rewrite:q};}
   var kindW=/\b(races?)\b/.test(t)?'Race':/\b(jobs?|class|classes)\b/.test(t)?'Job':/\b(origins?)\b/.test(t)?'Origin':null;
-  if(kindW&&(u.stat||u.goal==='tank')&&!it.length)return {u:u,own:function(){return rosterCard(u,kindW);}};
+  if(kindW&&(u.stat||u.goal==='tank')&&!it.length)return {u:u,aug:1,own:function(){return rosterCard(u,kindW);}};
   var stx=u.names.filter(function(x){return (x.kind==='status'||x.kind==='term'||x.kind==='stat')&&statusPlaces(x.name).length;});
-  if(stx.length&&!it.length&&/\b(which|what|where|list|any|show)\b/.test(t)&&/\b(dungeons?|bosses?|places?|disasters?|conquests?|have|has|with)\b/.test(t)&&!/\b(gear|items?|equipment|weapons?|armou?rs?|accessor(?:y|ies))\b/.test(t))return {u:u,own:function(){return statusCard(u,stx[0].name);}};
+  if(stx.length&&!it.length&&/\b(which|what|where|list|any|show)\b/.test(t)&&/\b(dungeons?|bosses?|places?|disasters?|conquests?|have|has|with)\b/.test(t)&&!/\b(gear|items?|equipment|weapons?|armou?rs?|accessor(?:y|ies))\b/.test(t))return {u:u,aug:1,own:function(){return statusCard(u,stx[0].name);}};
   var wantN=u.names.filter(function(x){return x.kind==='stat'||x.kind==='ability';}),hasWant=wantN.length||u.stat;
-  if(!hasWant&&!it.length&&!pl.length&&!u.neg&&(u.stars.length||u.slots.length)&&/\b(best|most|more)\b/.test(t)&&/\b(dungeons?|disasters?|conquests?|bosses?|places?|farm)\b/.test(t))return {u:u,own:function(){return bestPlaceCard(u);}};
-  if(!hasWant&&!it.length&&!pl.length&&/\b(rarest|least common|most common|commonest|hardest to (?:find|get)|fewest bosses|most bosses)\b/.test(t))return {u:u,own:function(){return rarestCard(u);}};
+  if(!hasWant&&!it.length&&!pl.length&&!u.neg&&(u.stars.length||u.slots.length)&&/\b(best|most|more)\b/.test(t)&&/\b(dungeons?|disasters?|conquests?|bosses?|places?|farm)\b/.test(t))return {u:u,aug:1,own:function(){return bestPlaceCard(u);}};
+  if(!hasWant&&!it.length&&!pl.length&&/\b(rarest|least common|most common|commonest|hardest to (?:find|get)|fewest bosses|most bosses)\b/.test(t))return {u:u,aug:1,own:function(){return rarestCard(u);}};
   if(u.stat&&!it.length&&!pl.length&&!/\b(what is|what does|whats|mean|means)\b/.test(t)){
     var farmQ=/\b(farm|farming|grind|dungeons?|where|which boss|bosses)\b/.test(t);
-    if(farmQ&&!u.stars.length&&!(u.slots.length&&u.slots.length<3))return {u:u,own:function(){return statCard(u,true);}};}
+    if(farmQ&&!u.stars.length&&!(u.slots.length&&u.slots.length<3))return {u:u,aug:1,own:function(){return statCard(u,true);}};}
   /* the filter engine steps in only when a FILTER is typed (stars, a place, "is there any", gear / items, where / which bosses);
      plain "what armor has parry" keeps the old answer (it also lists races, jobs and where to farm). Skills go the old way. */
   var onlySkill=u.slots.length&&u.slots.every(function(x){return x==='skill';});
@@ -300,17 +300,17 @@ function plan(raw,prev){var u=understand(raw),it=u.kinds('item'),pl=u.kinds('pla
     var want=wantN.map(function(x){return N(x.name);}),lab=wantN.map(function(x){return x.name;});
     if(u.stat){want.push(new RegExp('^'+u.stat+' Mastery$|'+MAIN[u.stat]+'|Almighty','i'));lab.push(MAIN[u.stat]+' / '+u.stat+' Mastery / Almighty');}
     var f={want:want,label:lab.join(' or '),stars:u.stars,slots:u.slots.length<3?u.slots:[],place:pl.length?pl[0].ref:null};
-    if(filterItems({want:want,stars:[],slots:[],place:null}).length)return {u:u,own:function(){return filterCard(u,f);}};}
+    if(filterItems({want:want,stars:[],slots:[],place:null}).length)return {u:u,aug:1,own:function(){return filterCard(u,f);}};}
   if(u.stat&&!it.length&&!pl.length&&!/\b(what is|what does|whats|mean|means)\b/.test(t)){
-    if(/\b(build|gear|weapons?|armou?rs?|accessor(?:y|ies)|equipment|items?)\b/.test(t)&&!engineOK(u.fixed))return {u:u,own:function(){return statCard(u,false);}};}
-  if(/\b(farm|farming|grind|grinding)\b/.test(t)&&!u.names.length&&!u.stat&&!u.goal&&!u.stars.length&&!u.slots.length&&/\b(what|where|which|should)\b/.test(t))return {u:u,own:farmAsk};
-  if(gearish.length>=2&&u.cmp&&!/\bcompare\b/.test(t))return {u:u,own:function(){return cmpCard(u,gearish);}};
-  if(gearish.length===1&&it.length===1&&/^(is|are)\b/.test(t)&&/\b(good|worth|strong|useful|decent|bad|op|any good)\b/.test(t))return {u:u,own:function(){return goodCard(u,gearish[0].ref.slot?gearish[0].ref:{name:gearish[0].name,slot:'',stars:{},at:[]});}};
-  if(/\b(max|maximum|cap|capped|limit|at most|upper limit|highest)\b/.test(t)&&!/\b(gear|items?|equipment|where|get|drops?|which)\b/.test(t)&&(/\bhp stacks?\b/.test(t)||u.names.some(function(x){return x.kind==='stat'||x.kind==='term';}))&&!it.length)return {u:u,own:function(q){u.q=q;return maxCard(u);}};
-  if(/\bcraft(?:ing|ed)?\b/.test(t)&&/\b(what|which)\b/.test(t)&&/\b(should|best|recommend|worth|first)\b/.test(t))return {u:u,own:function(q){return craftCard(u,q);}};
+    if(/\b(build|gear|weapons?|armou?rs?|accessor(?:y|ies)|equipment|items?)\b/.test(t)&&!engineOK(u.fixed))return {u:u,aug:1,own:function(){return statCard(u,false);}};}
+  if(/\b(farm|farming|grind|grinding)\b/.test(t)&&!u.names.length&&!u.stat&&!u.goal&&!u.stars.length&&!u.slots.length&&/\b(what|where|which|should)\b/.test(t))return {u:u,aug:1,own:farmAsk};
+  if(gearish.length>=2&&u.cmp&&!/\bcompare\b/.test(t))return {u:u,aug:1,own:function(){return cmpCard(u,gearish);}};
+  if(gearish.length===1&&it.length===1&&/^(is|are)\b/.test(t)&&/\b(good|worth|strong|useful|decent|bad|op|any good)\b/.test(t))return {u:u,aug:1,own:function(){return goodCard(u,gearish[0].ref.slot?gearish[0].ref:{name:gearish[0].name,slot:'',stars:{},at:[]});}};
+  if(/\b(max|maximum|cap|capped|limit|at most|upper limit|highest)\b/.test(t)&&!/\b(gear|items?|equipment|where|get|drops?|which)\b/.test(t)&&(/\bhp stacks?\b/.test(t)||u.names.some(function(x){return x.kind==='stat'||x.kind==='term';}))&&!it.length)return {u:u,aug:1,own:function(q){u.q=q;return maxCard(u);}};
+  if(/\bcraft(?:ing|ed)?\b/.test(t)&&/\b(what|which)\b/.test(t)&&/\b(should|best|recommend|worth|first)\b/.test(t))return {u:u,aug:1,own:function(q){return craftCard(u,q);}};
   var tm=u.kinds('term');
-  if(tm.length===1&&u.names.length===1&&/\b(what (?:does|do|is|s)|whats|explain|mean)\b/.test(t)&&plain(tm[0].ref.description).length<60)return {u:u,own:function(q){return termCard(u,tm[0],q);}};
-  if(pl.length===1&&!it.length&&/\b(good against|good vs|beat|beating|counter|kill|weak(?:ness|nesses)?|strategy|how to win)\b/.test(t))return {u:u,own:function(){return againstCard(u,pl[0].ref);}};
+  if(tm.length===1&&u.names.length===1&&/\b(what (?:does|do|is|s)|whats|explain|mean)\b/.test(t)&&plain(tm[0].ref.description).length<60)return {u:u,aug:1,own:function(q){return termCard(u,tm[0],q);}};
+  if(pl.length===1&&!it.length&&/\b(good against|good vs|beat|beating|counter|kill|weak(?:ness|nesses)?|strategy|how to win)\b/.test(t))return {u:u,aug:1,own:function(){return againstCard(u,pl[0].ref);}};
   return {u:u};}
 
 /* ---------- 3. hooks ---------- */
@@ -320,16 +320,18 @@ QA.pre.add('core2',1000,function(next){return function(raw){
   try{p=plan(raw,S.last);}catch(e){p={u:null};}
   var q=next(p.rewrite||raw);
   /* after a rewritten follow-up, remember the FULL question, so the next follow-up ("only skills") still knows the place */
-  if(real){S.cur={raw:raw,q:q,plan:p};S.last={raw:raw,q:q,u:p.rewrite?understand(p.rewrite):p.u};}
+  if(real){S.cur={raw:raw,q:q,plan:p};S.last={raw:raw,q:q,u:p.rewrite?understand(p.rewrite):p.u};
+    if(p.own&&p.aug)S.pend={raw:raw,q:q,plan:p,at:Date.now()};}
   return q;};});
 var prevMulti=W.__qaMulti;
 W.__qaMulti=function(q,a){
   var c=S.cur;
-  if(c&&c.q===q&&c.plan&&c.plan.own){S.cur=null;var h=null;try{h=c.plan.own(q);}catch(e){h=null;}if(h){S.shown={raw:c.raw,fixed:c.plan.u?c.plan.u.fixed:c.raw,at:Date.now()};return h;}}
+  if(c&&c.q===q&&c.plan&&c.plan.own&&!c.plan.aug){S.cur=null;var h=null;try{h=c.plan.own(q);}catch(e){h=null;}if(h){S.shown={raw:c.raw,fixed:c.plan.u?c.plan.u.fixed:c.raw,at:Date.now()};return h;}}
   return prevMulti?prevMulti(q,a):null;};
 if(QA.first)QA.first('core2',function(raw,e){
   var p;try{p=plan(raw,S.last);}catch(x){return false;}
   if(!p.own&&!p.rewrite)return false;
+  if(p.aug){S.pend={raw:raw,q:raw,plan:p,at:Date.now()};return false;}
   if(e.type==='keydown'){if(e.isComposing||e.keyCode===229)return false;e.preventDefault();}
   QA.state.orig=raw;W.__qaOrig=raw;
   try{QA.run();}catch(err){setTimeout(function(){throw err;},0);}
@@ -341,6 +343,36 @@ QA.shape.add('core2_note',1000,function(next){return function(el){var r=next.app
     if(n&&n.classList.contains('qa-note')&&/^Understood as:/.test(n.textContent)){
       if(sh.fixed&&sh.fixed!==sh.raw)n.innerHTML='Understood as: <b>'+E(sh.fixed)+'</b>';else n.parentNode.removeChild(n);}}}catch(e){}
   return r;};});
+/* v151 ADD-ON MODE: the old answer stays exactly as it was; the core's exact card goes on top, then "Also in the guide:".
+   Only an old answer that is a real failure (no match, chat filler) is replaced. Two cards with the same title: the longer stays.
+   It runs when the answer box has been quiet for 160 ms (after the old layers, the intent card and the chat layers). */
+var FAILV=/I couldn.t match|could not pin down|could not match it to an entry|cannot find this in the guide|outside this guide|outside what I know|not in this guide|does not cover this/i;
+function tnorm(el){var t=el&&el.querySelector('.qa-title');return t?t.textContent.replace(/\s+/g,' ').trim().toLowerCase():'';}
+function addOn(){var p=S.pend;if(!p)return;S.pend=null;
+  try{var its=p.plan.u&&p.plan.u.kinds('item');if(its&&its.length===1&&QA.state)QA.state.item=its[0].name;}catch(e){}
+  if(Date.now()-p.at>4000||!inp||inp.value!==p.raw||out.querySelector('[data-core2]'))return;
+  var html=null;try{html=p.plan.own(p.q||p.raw);}catch(e){html=null;}if(!html)return;
+  var box=D.createElement('div');box.innerHTML=html;
+  var old=[].slice.call(out.children).filter(function(n){return n.offsetParent!==null||n.getClientRects().length;});
+  var oldTxt=old.map(function(n){return n.innerText||'';}).join('\n');
+  var failed=!old.length||FAILV.test(oldTxt.slice(0,400))||!!out.querySelector('[data-ft]')||!!out.querySelector('[data-core2u]');
+  if(failed){out.innerHTML='';while(box.firstChild)out.appendChild(box.firstChild);return;}
+  /* a gear-list card whose pieces the old answer already shows adds nothing: leave the old answer alone */
+  var mine=box.querySelector('[data-core2="filter"],[data-core2="stat"]');
+  if(mine&&box.querySelectorAll(':scope > .qa-card').length===1){var names=[].map.call(mine.querySelectorAll('[data-item]'),function(x){return x.getAttribute('data-item');});
+    if(names.length&&names.every(function(n){return oldTxt.indexOf(n)>=0;}))return;}
+  /* the same card twice: the OLD card always stays; the new copy is dropped only when the old one already says all of it */
+  var squash=function(x){return String(x||'').replace(/\s+/g,' ').trim();};
+  [].slice.call(box.querySelectorAll(':scope > .qa-card')).forEach(function(c){var tt=tnorm(c);if(!tt||c.hasAttribute('data-core2'))return;
+    if(old.some(function(o){return o.classList&&o.classList.contains('qa-card')&&tnorm(o)===tt&&squash(o.innerText).indexOf(squash(c.innerText).slice(tt.length))>=0;}))c.parentNode.removeChild(c);});
+  /* supplement cards (subtitle ends in "(end)") go below the old answer; the rest on top */
+  [].slice.call(box.querySelectorAll(':scope > .qa-card')).forEach(function(c){var sb=c.querySelector('.qa-sub');if(sb&&/\(end\)$/.test(sb.textContent)){sb.textContent=sb.textContent.replace(/ ?\(end\)$/,'');out.appendChild(c);}});
+  if(!box.firstChild)return;
+  var first=out.firstChild;
+  while(box.firstChild)out.insertBefore(box.firstChild,first);
+  if(first)out.insertBefore((function(){var d=D.createElement('div');d.className='qa-note';d.setAttribute('data-core2-also','1');d.textContent='Also in the guide:';return d;})(),first);}
+var out=D.getElementById('qaOut');
+if(out&&typeof MutationObserver!=='undefined')new MutationObserver(function(){if(!S.pend)return;clearTimeout(S.tm);S.tm=setTimeout(addOn,160);}).observe(out,{childList:true,subtree:true});
 QA.understand=understand;
 QA.core2={plan:function(q){var p=plan(q,S.last);return {rewrite:p.rewrite||null,own:!!p.own,u:p.u};},last:function(){return S.last;},
   html:function(q){var p=plan(q,S.last);if(!p.own)return null;try{return p.own(W.__qaPre?W.__qaPre(q):q);}catch(e){return 'ERROR '+e;}}};

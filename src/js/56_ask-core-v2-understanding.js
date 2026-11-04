@@ -45,6 +45,10 @@ function index(){if(IX)return IX;
   if(typeof SKILL_DETAILS!=='undefined')Object.keys(SKILL_DETAILS).forEach(function(k){if(!items[N(k)+'|skill'])add(k,'item',{name:k,slot:'skill',stars:{},at:[]});});
   Object.keys(STATS).forEach(function(k){add(k,'stat',STATS[k]);});
   Object.keys(TERMS).forEach(function(k){add(k,'term',TERMS[k]);});
+  /* v150: gear ability names (Barrier Development ...) and dungeon status names (Miasma ...) are known names too */
+  var seen={};names.forEach(function(x){seen[x.n]=1;});
+  Object.keys(ITEM_DETAILS).forEach(function(k){var d=ITEM_DETAILS[k];(d.abilities||(d.ability?[d.ability]:[])).forEach(function(a){var n=N(a.name);if(a.name&&!seen[n]){seen[n]=1;add(a.name,'ability',a);}});});
+  if(typeof DUNGEON_STATUS!=='undefined')Object.keys(DUNGEON_STATUS).forEach(function(k){(DUNGEON_STATUS[k].status||[]).forEach(function(st){var n=typeof st==='string'?st:(st.term||st.stat||'');if(n&&!seen[N(n)]){seen[N(n)]=1;add(n,'status',st);}});});
   names.sort(function(a,b){return b.n.length-a.n.length;});
   IX={places:places,items:items,names:names};return IX;}
 function detail(name){return ITEM_DETAILS[name]||ITEM_DETAILS[name+'::weapon']||ITEM_DETAILS[name+'::armor']||ITEM_DETAILS[name+'::accessory']||null;}
@@ -179,10 +183,95 @@ function againstCard(u,p){var base=full(p.name);
     line('What it has: the gear and skills '+E(p.name)+' drops (below), and general help:')+
     chips([['How do I survive longer?','How can I survive longer'],['How do I deal more damage?','How can I deal more damage']]),'against')+(FAIL.test(base)?'':base);}
 
+/* ===== v150: filter engine, rankings, dungeon statuses, races / jobs / origins, unknown words ===== */
+/* k. one filter engine: a stat or ability + stars + slots + a place (+ "is there any") -> matching gear from the tables */
+function lineHit(ln,want){var a=N(ln);if(a===want)return true;return ln.indexOf('+')>0&&ln.split('+').some(function(p){return N(p)===want;});}
+function filterItems(f){var ix=index(),out=[];
+  Object.keys(ix.items).forEach(function(k){var it=ix.items[k];if(it.slot==='skill')return;
+    if(f.slots.length&&f.slots.indexOf(it.slot)<0)return;
+    var at=it.at.filter(function(a){return (!f.place||a.p===f.place)&&(!f.stars.length||f.stars.indexOf(a.star)>=0);});
+    if((f.place||f.stars.length)&&!at.length)return;
+    var hit=lines(it.name).map(function(l){return l.n;}).filter(function(n,i,a){return a.indexOf(n)===i&&f.want.some(function(w){return w.test?w.test(n):lineHit(n,w);});});
+    if(!hit.length)return;
+    out.push({it:it,hit:hit,at:at.length?at:it.at,s7:at.some(function(a){return a.star===7;})||it.stars[7]?1:0});});
+  return out.sort(function(a,b){return b.s7-a.s7||a.it.name.localeCompare(b.it.name);});}
+function filterCard(u,f){var list=filterItems(f),yn=/^(is there|are there|does any|do any|any|is any|are any)\b/.test(u.t);
+  var st=f.stars.map(function(s){return s+'★';}).join(' or '),sl=f.slots.length&&f.slots.length<3?f.slots.map(function(s){return SLN[s].toLowerCase();}).join(' / '):'gear';
+  var what=(st?st+' ':'')+sl+' with '+f.label+(f.place?' in '+f.place.name:'');
+  var h='';
+  if(!list.length){var tries=[[{want:f.want,stars:[],slots:f.slots,place:f.place},'any star'],[{want:f.want,stars:f.stars,slots:[],place:f.place},'any slot'],[{want:f.want,stars:f.stars,slots:f.slots,place:null},'any place'],[{want:f.want,stars:[],slots:[],place:null},'no other filter']],best=null;
+    for(var i=0;i<tries.length&&!best;i++){if((i===0&&!f.stars.length)||(i===1&&!f.slots.length)||(i===2&&!f.place))continue;var r=filterItems(tries[i][0]);if(r.length)best={l:r,why:tries[i][1]};}
+    h=lead('<b>No.</b> No '+E(what)+' in the guide\u2019s tables.')+(best?line('<span class="qa-lab">Closest ('+E(best.why)+')</span> '+best.l.slice(0,6).map(function(x){return itemChip(x.it,x.s7?7:6)+' <span class="qa-sub">'+E(x.hit.join(', '))+'</span>';}).join(' ')+(best.l.length>6?' +'+(best.l.length-6)+' more':'')):'');
+    return card(E(what.charAt(0).toUpperCase()+what.slice(1)),'checked every row',h,'filter');}
+  h=lead((yn?'<b>Yes.</b> ':'')+list.length+' piece'+(list.length===1?'':'s')+':');
+  ['weapon','armor','accessory'].forEach(function(s){var l=list.filter(function(x){return x.it.slot===s;});if(!l.length)return;
+    h+='<div class="qa-slot"><b>'+SLN[s]+'</b>'+l.slice(0,8).map(function(x){return line(itemChip(x.it,x.s7?7:6)+' '+x.hit.map(E).join(', ')+' <span class="qa-sub">'+where({at:x.at})+'</span>');}).join('')+(l.length>8?note('+'+(l.length-8)+' more'):'')+'</div>';});
+  if(!f.place&&list.length>1){var rank=farmRank(list).slice(0,5);
+    if(rank.length)h+='<div class="qa-slot"><b>Where to farm</b>'+rank.map(function(r){return line(placeChip(r.p)+' <span class="qa-sub">'+E(r.p.type.toLowerCase())+'</span> · '+r.n+' piece'+(r.n===1?'':'s'));}).join('')+'</div>';}
+  return card(E(what.charAt(0).toUpperCase()+what.slice(1)),'from the guide’s tables',h,'filter');}
+/* l. rarest / most common item (with star and slot filters) */
+function rarestCard(u){var ix=index(),asc=!/\b(most common|commonest|most bosses|most places|easiest)\b/.test(u.t),stars=u.stars,slots=u.slots.length?u.slots:SLOTS,rows=[],sp=[];
+  Object.keys(ix.items).forEach(function(k){var it=ix.items[k];if(slots.indexOf(it.slot)<0)return;
+    var at=it.at.filter(function(a){return !stars.length||stars.indexOf(a.star)>=0;});if(!at.length)return;
+    var real=at.filter(function(a){return a.p.type!=='Special';});
+    if(!real.length)sp.push(it);else rows.push({it:it,n:real.length,s:at[0].star});});
+  rows.sort(function(a,b){return asc?a.n-b.n||a.it.name.localeCompare(b.it.name):b.n-a.n||a.it.name.localeCompare(b.it.name);});
+  var top=rows.length?rows.filter(function(r){return r.n===rows[0].n;}):[];
+  var what=(stars.length?stars.map(function(s){return s+'★';}).join(' or ')+' ':'')+(slots.length<4?slots.map(function(s){return SLN[s].toLowerCase();}).join(' / '):'items');
+  var h=top.length?lead((asc?'Fewest':'Most')+' boss rows: <b>'+top[0].n+'</b>.')+line(top.slice(0,10).map(function(r){return itemChip(r.it,r.s);}).join('')+(top.length>10?' +'+(top.length-10)+' more':'')):'';
+  var next=rows.filter(function(r){return r.n!==(top[0]&&top[0].n);}).slice(0,6);
+  if(next.length)h+=line('<span class="qa-lab">Next</span> '+next.map(function(r){return itemChip(r.it,r.s)+' <span class="qa-sub">'+r.n+'</span>';}).join(' '));
+  if(asc&&sp.length)h+=line('<span class="qa-lab">Only in special dungeons</span> '+sp.slice(0,8).map(function(it){return itemChip(it,7);}).join('')+(sp.length>8?' +'+(sp.length-8)+' more':''));
+  h+=note('Counted from the drop tables: how many dungeon, disaster and conquest rows list each one. The tables do not give drop chances.');
+  return card((asc?'Rarest ':'Most common ')+E(what),'by number of boss rows',h,'rare');}
+/* m. which place is best for N-star <slot>: rank the rows; say so when they are all equal */
+function bestPlaceCard(u){var ix=index(),types=[];
+  if(/\bdungeons?\b/.test(u.t))types.push('Dungeon');if(/\bdisasters?\b/.test(u.t))types.push('Disaster');if(/\bconquests?\b/.test(u.t))types.push('Conquest');
+  if(!types.length)types=['Dungeon','Disaster','Conquest'];
+  var stars=u.stars.length?u.stars:[7],slots=u.slots.length?u.slots:SLOTS;
+  var rows=ix.places.filter(function(p){return types.indexOf(p.type)>=0;}).map(function(p){var l=[];slots.forEach(function(s){stars.forEach(function(st){p.cells[s][st===7?1:0].forEach(function(n){l.push({n:n,s:s,st:st});});});});return {p:p,l:l};});
+  rows.sort(function(a,b){return b.l.length-a.l.length||a.p.name.localeCompare(b.p.name);});
+  var what=stars.map(function(s){return s+'★';}).join(' or ')+' '+(slots.length<4?slots.map(function(s){return SLN[s].toLowerCase();}).join(' / '):'items');
+  var same=rows.length&&rows[0].l.length===rows[rows.length-1].l.length,h;
+  var ln=function(r){return line(placeChip(r.p)+' <span class="qa-sub">'+r.l.length+'</span> '+r.l.slice(0,6).map(function(x){return '<span class="item qa-chip s'+x.st+'" data-item="'+E(x.n)+'" data-slot="'+x.s+'">'+E(x.n)+'</span>';}).join(''));};
+  var one=rows.length&&rows[0].l.length===1?what.replace(/(weapons|skills)\b/,function(m){return m.slice(0,-1);}).replace(/accessories\b/,'accessory').replace(/\bitems\b/,'item'):what;
+  if(same)h=lead('They are <b>all equal</b>: every one of the '+rows.length+' lists '+rows[0].l.length+' '+E(one)+'. So pick by WHICH one you want:')+rows.map(ln).join('');
+  else h=lead('Most '+E(what)+' per row:')+rows.slice(0,8).map(ln).join('')+note('Counted from the drop tables (number of listed items, not drop chances).');
+  return card('Best place for '+E(what),'by the drop tables',h,'bestplace');}
+/* n. which places have a dungeon status (Gloomy, Miasma, Number of Encounters ...) */
+function statusPlaces(nm){var out=[],w=N(nm);if(typeof DUNGEON_STATUS==='undefined')return out;
+  Object.keys(DUNGEON_STATUS).forEach(function(k){(DUNGEON_STATUS[k].status||[]).forEach(function(s){var n=typeof s==='string'?s:(s.term||s.stat||'');
+    if(N(n)===w){var p=index().places.filter(function(x){return x.name===k;})[0];out.push({name:k,p:p,v:typeof s==='string'?'':(s.value||'')});}});});
+  return out;}
+function statusCard(u,nm){var l=statusPlaces(nm);
+  var h=l.length?lead('<b>'+l.length+'</b> row'+(l.length===1?' in the tables shows':'s in the tables show')+' the dungeon status <b>'+E(nm)+'</b>:')+line(l.map(function(x){return (x.p?placeChip(x.p):E(x.name))+(x.v?' <span class="qa-sub">'+E(x.v)+'</span>':'');}).join(' '))
+    :lead('No row in the tables shows the dungeon status '+E(nm)+'.');
+  return card('Where '+E(nm)+' appears','dungeon status',h,'status')+chips([['What does '+nm+' do?','What does '+nm+' do?']]);}
+/* o. races / jobs / origins ranked by a main stat, or for a tank (from their starting stats in the guide) */
+var KBR=null;function kbRows(){if(KBR)return KBR;KBR=[];try{JSON.parse(D.getElementById('qaKB').textContent).forEach(function(r){if(/^(Race|Job|Origin)$/.test(r[0])){
+  var t=String(r[2]||''),v={},m,re=/\b(STR|DEX|INT|PIE|HP)\s+(\d+)/g;while((m=re.exec(t)))v[m[1]]=+m[2];
+  m=/HP Stacks:\s*(\d+)/.exec(t);v.STK=m?+m[1]:0;m=/Shield:\s*(\d+)/.exec(t);v.SH=m?+m[1]:0;
+  var o=/Other Stats:\s*([^;]+)/.exec(t);KBR.push({kind:r[0],name:r[1],v:v,other:o?o[1]:''});}});}catch(e){}return KBR;}
+function rosterCard(u,kind){var rows=kbRows().filter(function(r){return r.kind===kind;}),label={Race:'races',Job:'jobs',Origin:'origins'}[kind],h,title;
+  if(u.stat){var s=u.stat;rows=rows.slice().sort(function(a,b){return (b.v[s]||0)-(a.v[s]||0)||a.name.localeCompare(b.name);});
+    var top=rows.filter(function(r){return (r.v[s]||0)>0;}).slice(0,8);title='Best '+label+' for '+s;
+    h=lead('Highest starting '+s+':')+top.map(function(r){return line('<b>'+E(r.name)+'</b> \u00b7 '+s+' <b>'+r.v[s]+'</b> <span class="qa-sub">'+['STR','DEX','INT','PIE'].filter(function(k){return k!==s;}).map(function(k){return k+' '+(r.v[k]||0);}).join(' ')+'</span>');}).join('');}
+  else{rows=rows.slice().sort(function(a,b){return b.v.STK-a.v.STK||(b.v.HP||0)-(a.v.HP||0)||b.v.SH-a.v.SH||a.name.localeCompare(b.name);});title='Tankiest '+label;
+    h=lead('Most HP stacks, then HP, then shield (starting stats):')+rows.slice(0,8).map(function(r){return line('<b>'+E(r.name)+'</b> · HP stacks '+r.v.STK+' · HP '+(r.v.HP||0)+(r.v.SH?' · Shield '+r.v.SH:'')+(r.other&&/parry|guts|resist|armor|shield|hp/i.test(r.other)?' <span class="qa-sub">'+E(r.other)+'</span>':''));}).join('');}
+  h+=note('From the starting stats listed in the guide. Abilities and skills also matter; tap a name to read them.');
+  return card(E(title),'from the guide’s '+label+' list',h,'roster')+chips(rows.slice(0,3).map(function(r){return ['About '+r.name,'Tell me about '+r.name];}));}
+/* p. words the guide does not know at all: say so plainly (no chat filler) */
+var CHAT=/^(hi|hello|hey|yo|sup|hiya|ok|okay|k|lol|lmao|haha|thanks?|thx|ty|bye|cya|cool|nice|yes|no|yeah|nope|wow|hm+|ah+|oh+)$/;
+function unknownCard(u){var ex=[['Where does Tsukuyomi drop?','Where does Tsukuyomi drop?'],['Best weapon for INT build','Best weapon for INT build'],['What does Burn do?','What does Burn do?'],['What should I farm?','What should I farm?']];
+  return card('Not in the guide','no match',lead('I could not find <b>'+E(u.raw.trim())+'</b> in the guide.')+line('Try the name of an item, skill, boss, dungeon or stat, or tap one:')+chips(ex),'unknown');}
+
 function plan(raw,prev){var u=understand(raw),it=u.kinds('item'),pl=u.kinds('place'),t=u.t;
   var gearish=it.filter(function(x){return x.ref&&(x.ref.slot||detail(x.name));});
   if(u.pct&&!pl.length&&!it.length&&/\b(runs?|tries|attempts|kills|clears|times|farm|how many|how long|chance|odds)\b/.test(t))return {u:u,own:function(){return runsCard(u);}};
   if(u.neg&&u.slots.length&&!pl.length&&!it.length&&/\b(which|what|any|list|show)\b/.test(t)&&/\b(dungeons?|disasters?|conquests?|bosses?|places?|where)\b/.test(t))return {u:u,own:function(){return noneCard(u);}};
+  /* v150: gibberish (no word the guide knows) -> a plain "not in the guide" card instead of chat filler */
+  var ws=t.split(' ').filter(function(w){return w.length>1;});
+  if(ws.length&&ws.length<=5&&!u.names.length&&!u.stat&&!u.stars.length&&!u.slots.length&&!u.pct&&!ws.some(function(w){return CHAT.test(w);})&&W.__qaKnown&&ws.every(function(w){try{return !W.__qaKnown(w);}catch(e){return false;}})&&!engineOK(u.fixed)&&!(function(){try{return W.__qaUnderstood&&W.__qaUnderstood(u.fixed);}catch(e){return false;}})())return {u:u,own:function(){return unknownCard(u);}};
   /* a follow-up names no item or place; a bare slot word (armor, skills ...) is the slot, not the Armor rule */
   var named=u.names.filter(function(x){return !/^(armou?rs?|weapons?|accessor(?:y|ies)|skills?|gear|equipment)$/.test(N(x.name));});
   if(u.follow&&(u.stars.length||u.slots.length)&&!named.length&&!u.stat&&prev&&prev.u&&prev.u.kinds('place').length){
@@ -192,14 +281,32 @@ function plan(raw,prev){var u=understand(raw),it=u.kinds('item'),pl=u.kinds('pla
       var SW=/\b(weapons?|armou?rs?|accessor(?:y|ies)|skills?|gear|equipment|stuff|items?)\b/i;
       q=SW.test(q)?q.replace(SW,sw):/\bdrops?\b/i.test(q)?q.replace(/\bdrops?\b/i,sw+' drop'):q+' '+sw;}
     return {u:u,rewrite:q};}
+  var kindW=/\b(races?)\b/.test(t)?'Race':/\b(jobs?|class|classes)\b/.test(t)?'Job':/\b(origins?)\b/.test(t)?'Origin':null;
+  if(kindW&&(u.stat||u.goal==='tank')&&!it.length)return {u:u,own:function(){return rosterCard(u,kindW);}};
+  var stx=u.names.filter(function(x){return (x.kind==='status'||x.kind==='term'||x.kind==='stat')&&statusPlaces(x.name).length;});
+  if(stx.length&&!it.length&&/\b(which|what|where|list|any|show)\b/.test(t)&&/\b(dungeons?|bosses?|places?|disasters?|conquests?|have|has|with)\b/.test(t)&&!/\b(gear|items?|equipment|weapons?|armou?rs?|accessor(?:y|ies))\b/.test(t))return {u:u,own:function(){return statusCard(u,stx[0].name);}};
+  var wantN=u.names.filter(function(x){return x.kind==='stat'||x.kind==='ability';}),hasWant=wantN.length||u.stat;
+  if(!hasWant&&!it.length&&!pl.length&&!u.neg&&(u.stars.length||u.slots.length)&&/\b(best|most|more)\b/.test(t)&&/\b(dungeons?|disasters?|conquests?|bosses?|places?|farm)\b/.test(t))return {u:u,own:function(){return bestPlaceCard(u);}};
+  if(!hasWant&&!it.length&&!pl.length&&/\b(rarest|least common|most common|commonest|hardest to (?:find|get)|fewest bosses|most bosses)\b/.test(t))return {u:u,own:function(){return rarestCard(u);}};
   if(u.stat&&!it.length&&!pl.length&&!/\b(what is|what does|whats|mean|means)\b/.test(t)){
     var farmQ=/\b(farm|farming|grind|dungeons?|where|which boss|bosses)\b/.test(t);
-    if(farmQ)return {u:u,own:function(){return statCard(u,true);}};
+    if(farmQ&&!u.stars.length&&!(u.slots.length&&u.slots.length<3))return {u:u,own:function(){return statCard(u,true);}};}
+  /* the filter engine steps in only when a FILTER is typed (stars, a place, "is there any", gear / items, where / which bosses);
+     plain "what armor has parry" keeps the old answer (it also lists races, jobs and where to farm). Skills go the old way. */
+  var onlySkill=u.slots.length&&u.slots.every(function(x){return x==='skill';});
+  if(hasWant&&!onlySkill&&!it.length&&pl.length<=1&&!/\b(best|good|build|builds|recommend)\b/.test(t)&&(!/\b(what is|what are|what does|whats|how does|how do|explain|mean|means|work|works)\b/.test(t)||/\b(which|any|list|show|where)\b/.test(t))&&
+     (u.stars.length||pl.length||/^(is there|are there|does any|do any|any|is any|are any)\b/.test(t)||/\b(gear|items?|equipment|where|which bosses|bosses|farm|farming|drops?|get)\b/.test(t)||
+      (u.slots.length&&u.slots.length<3&&/\b(which|what|any)\b/.test(t)&&/\b(has|have|with|gives?|giving|grants?)\b/.test(t)))){
+    var want=wantN.map(function(x){return N(x.name);}),lab=wantN.map(function(x){return x.name;});
+    if(u.stat){want.push(new RegExp('^'+u.stat+' Mastery$|'+MAIN[u.stat]+'|Almighty','i'));lab.push(MAIN[u.stat]+' / '+u.stat+' Mastery / Almighty');}
+    var f={want:want,label:lab.join(' or '),stars:u.stars,slots:u.slots.length<3?u.slots:[],place:pl.length?pl[0].ref:null};
+    if(filterItems({want:want,stars:[],slots:[],place:null}).length)return {u:u,own:function(){return filterCard(u,f);}};}
+  if(u.stat&&!it.length&&!pl.length&&!/\b(what is|what does|whats|mean|means)\b/.test(t)){
     if(/\b(build|gear|weapons?|armou?rs?|accessor(?:y|ies)|equipment|items?)\b/.test(t)&&!engineOK(u.fixed))return {u:u,own:function(){return statCard(u,false);}};}
   if(/\b(farm|farming|grind|grinding)\b/.test(t)&&!u.names.length&&!u.stat&&!u.goal&&!u.stars.length&&!u.slots.length&&/\b(what|where|which|should)\b/.test(t))return {u:u,own:farmAsk};
   if(gearish.length>=2&&u.cmp&&!/\bcompare\b/.test(t))return {u:u,own:function(){return cmpCard(u,gearish);}};
   if(gearish.length===1&&it.length===1&&/^(is|are)\b/.test(t)&&/\b(good|worth|strong|useful|decent|bad|op|any good)\b/.test(t))return {u:u,own:function(){return goodCard(u,gearish[0].ref.slot?gearish[0].ref:{name:gearish[0].name,slot:'',stars:{},at:[]});}};
-  if(/\b(max|maximum|cap|capped|limit|at most|upper limit|highest)\b/.test(t)&&(/\bhp stacks?\b/.test(t)||u.names.some(function(x){return x.kind==='stat'||x.kind==='term';}))&&!it.length)return {u:u,own:function(q){u.q=q;return maxCard(u);}};
+  if(/\b(max|maximum|cap|capped|limit|at most|upper limit|highest)\b/.test(t)&&!/\b(gear|items?|equipment|where|get|drops?|which)\b/.test(t)&&(/\bhp stacks?\b/.test(t)||u.names.some(function(x){return x.kind==='stat'||x.kind==='term';}))&&!it.length)return {u:u,own:function(q){u.q=q;return maxCard(u);}};
   if(/\bcraft(?:ing|ed)?\b/.test(t)&&/\b(what|which)\b/.test(t)&&/\b(should|best|recommend|worth|first)\b/.test(t))return {u:u,own:function(q){return craftCard(u,q);}};
   var tm=u.kinds('term');
   if(tm.length===1&&u.names.length===1&&/\b(what (?:does|do|is|s)|whats|explain|mean)\b/.test(t)&&plain(tm[0].ref.description).length<60)return {u:u,own:function(q){return termCard(u,tm[0],q);}};

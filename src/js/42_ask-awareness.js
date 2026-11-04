@@ -46,10 +46,10 @@ function build(q,why){
     if(m.near.length)h+='<div class="qa-line">'+lab('Closest entries')+m.near.map(function(r){return ask(r.d.name,'What does '+r.d.name+' do?');}).join('')+'</div>';
   }
   var core=U?('intent '+esc(U.intent&&U.intent.primary||'?')+', confidence '+esc(U.confidence)+(U.summary?', read as \u201c'+esc(U.summary)+'\u201d':'')):'not available';
-  h+='<details class="qa-more qa-fold"><summary>What I understood</summary><div class="qa-line">'+lab('Question form')+esc(FL[f])+'</div><div class="qa-line">'+lab('Words matched')+(m.qt.length?esc(m.qt.join(', ')):'none')+'</div>'+(unk.length?'<div class="qa-line">'+lab('Not recognised')+esc(unk.join(', '))+'</div>':'')+'<div class="qa-line">'+lab('Topic reader')+core+'</div><div class="qa-line">'+lab('Why this answer')+esc(why)+'</div><div class="qa-line">Nothing here is generated word by word: facts are copied from the guide data and the sentences are hand-written.</div></details>';
-  return '<div class="qa-card" data-aw="1"><div class="qa-title">What I understood<span class="qa-sub">awareness check</span></div>'+h+'</div>';}
+  h+='<details class="qa-more qa-fold" data-debug="1"><summary>What I understood</summary><div class="qa-line">'+lab('Question form')+esc(FL[f])+'</div><div class="qa-line">'+lab('Words matched')+(m.qt.length?esc(m.qt.join(', ')):'none')+'</div>'+(unk.length?'<div class="qa-line">'+lab('Not recognised')+esc(unk.join(', '))+'</div>':'')+'<div class="qa-line">'+lab('Topic reader')+core+'</div><div class="qa-line">'+lab('Why this answer')+esc(why)+'</div><div class="qa-line">Nothing here is generated word by word: facts are copied from the guide data and the sentences are hand-written.</div></details>';
+  return '<div class="qa-card" data-aw="1"><div class="qa-title">What I understood<span class="qa-sub">from the guide</span></div>'+h+'</div>';}
 var busy=false;
-function check(){if(busy||out.querySelector('[data-aw],[data-redirect]'))return;var q=inp.value;if(!q||!q.trim())return;
+function check(){if(busy||out.querySelector('[data-aw],[data-redirect],[data-core2]'))return; /* v150: [data-core2] = the Ask core v2 answered from the guide data */var q=inp.value;if(!q||!q.trim())return;
   var txt=out.textContent||'',menu=/Tell me a bit more/.test(txt)||/I couldn.t match/.test(txt),rc=!!out.querySelector('[data-rc]'),f=form(q),why=null;
   if(menu)why='The Ask box was unsure what you meant, so it would only have shown the generic menu.';
   else if(f!=='other'){var t0=out.querySelector('.qa-title'),tt=t0?t0.textContent:'',U=reading(q),rec=U&&U.intent&&U.intent.primary==='recommend';

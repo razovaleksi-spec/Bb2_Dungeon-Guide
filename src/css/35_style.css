@@ -1,0 +1,4 @@
+
+#calcBox select,#calcBox input{background:#1c2030;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 10px;font-size:16px;width:100%;box-sizing:border-box}
+#calcBox .cf{display:block;margin:8px 0;font-size:13px;color:var(--dim)}#calcBox .cf span{display:block;margin-bottom:3px}
+#calcBox .cr{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}#calcBox .cr button{flex:1 1 140px;min-height:40px}

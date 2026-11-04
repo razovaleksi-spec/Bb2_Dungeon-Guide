@@ -1,0 +1,4 @@
+.split_check.html
+__pycache__/
+node_modules/
+*.pyc

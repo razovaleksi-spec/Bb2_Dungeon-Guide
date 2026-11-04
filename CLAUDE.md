@@ -40,9 +40,9 @@
   Guts is capped at 95 everywhere (tooltip Max:+95% + rule R38): guts_chance formula verified clamp 0..95, the calculator
   and the Guts lines no longer say "maximum not known yet". Duplicate-card check compares text without spaces (fixes the
   same card shown twice). User report that led to it: the HP-stack rules card looked like a broken challenge card.
-- v152 =  v151 APPROVED by the user 2026-11-04 ("Very good",
-  add-on approach) = tests/golden.json baseline now (recorded from v151, 203 questions).
-  v152 = v151 + names typed without 's ("bianca staff"), A-or-B for a main stat ("... for int"), where EACH item drops
+- v151 APPROVED by the user 2026-11-04 ("Very good", add-on approach) = tests/golden.json baseline now (recorded
+  from v151, 203 questions).
+- v152 = v151 + names typed without 's ("bianca staff"), A-or-B for a main stat ("... for int"), where EACH item drops
   ("queens dress and tsukuyomi"), item by boss type ("which conquest drops ray gun"), honest "strongest" card,
   place counts, "how to get 7 star items" from the tables, index "Conquests (23)" with Land Devourer (C4 fixed).
   Wording: items only in special rows are "listed under a special dungeon"; Crystal Beach is never counted as a

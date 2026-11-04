@@ -34,7 +34,13 @@
 - Pictures: lossless WebP, tight square, 116x116 for icons (crop spec in the user's entry save point).
 
 ## Current state (VERIFIED 2026-11-04)
-- src/ = v152 (built file Bb2dungeon-ESv4v152.html). NOT approved yet. v151 APPROVED by the user 2026-11-04 ("Very good",
+- src/ = v153 (built file Bb2dungeon-ESv4v153.html). NOT approved yet (v152 neither).
+  v153 = v152 + rules cards (Mechanics layer 30) end with "Try it" + the examples + "Open calculator to test it", which opens
+  the SAME calculator Challenge me uses, inside that card (__openCalc got a host argument; 36 calcbox handles data-opencalc).
+  Guts is capped at 95 everywhere (tooltip Max:+95% + rule R38): guts_chance formula verified clamp 0..95, the calculator
+  and the Guts lines no longer say "maximum not known yet". Duplicate-card check compares text without spaces (fixes the
+  same card shown twice). User report that led to it: the HP-stack rules card looked like a broken challenge card.
+- v152 =  v151 APPROVED by the user 2026-11-04 ("Very good",
   add-on approach) = tests/golden.json baseline now (recorded from v151, 203 questions).
   v152 = v151 + names typed without 's ("bianca staff"), A-or-B for a main stat ("... for int"), where EACH item drops
   ("queens dress and tsukuyomi"), item by boss type ("which conquest drops ray gun"), honest "strongest" card,

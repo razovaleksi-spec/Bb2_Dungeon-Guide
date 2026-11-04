@@ -404,9 +404,9 @@ function addOn(){var p=S.pend;if(!p)return;S.pend=null;
   if(mine&&box.querySelectorAll(':scope > .qa-card').length===1){var names=[].map.call(mine.querySelectorAll('[data-item]'),function(x){return x.getAttribute('data-item');});
     if(names.length&&names.every(function(n){return oldTxt.indexOf(n)>=0;}))return;}
   /* the same card twice: the OLD card always stays; the new copy is dropped only when the old one already says all of it */
-  var squash=function(x){return String(x||'').replace(/\s+/g,' ').trim();};
+  var squash=function(x){return String(x||'').replace(/\s+/g,'').toLowerCase();};
   [].slice.call(box.querySelectorAll(':scope > .qa-card')).forEach(function(c){var tt=tnorm(c);if(!tt||c.hasAttribute('data-core2'))return;
-    if(old.some(function(o){return o.classList&&o.classList.contains('qa-card')&&tnorm(o)===tt&&squash(o.innerText).indexOf(squash(c.innerText).slice(tt.length))>=0;}))c.parentNode.removeChild(c);});
+    if(old.some(function(o){return o.classList&&o.classList.contains('qa-card')&&tnorm(o)===tt&&squash(o.textContent).indexOf(squash(c.textContent))>=0;}))c.parentNode.removeChild(c);});
   /* supplement cards (subtitle ends in "(end)") go below the old answer; the rest on top */
   [].slice.call(box.querySelectorAll(':scope > .qa-card')).forEach(function(c){var sb=c.querySelector('.qa-sub');if(sb&&/\(end\)$/.test(sb.textContent)){sb.textContent=sb.textContent.replace(/ ?\(end\)$/,'');out.appendChild(c);}});
   if(!box.firstChild)return;

@@ -65,7 +65,7 @@ function calcHpShield(z){if(!(has(z,'hp')||has(z,'shield')||has(z,'health')))ret
   if(raw===null)return null;var sh=has(z,'shield')&&!has(z,'hp'),r=run(sh?'max_shield_final':'max_hp_final',{raw:raw,pct:pct});if(!r)return null;
   var step=Math.floor(raw*85/100+0.5);return card(sh?'Max shield':'Max HP','calculator \u00b7 '+labelOf(r.status),line(fmt(raw)+' x 0.85 = '+fmt(step)+(pct?', then +'+fmt(pct)+'% = ':' = ')+'<b>'+fmt(r.value)+'</b> (rounded half up each step'+(sh?'':', never below 1')+').')+line('<i>'+esc(badge(r.status))+'</i>'),[['How is max HP worked out?','how is max hp worked out']]);}
 function calcGuts(z){if(!has(z,'guts'))return null;var o=labelled(z,{g:['guts']});if(!o.g)return null;var r=run('guts_chance',{guts:o.g.v});if(!r)return null;
-  return card('Guts','calculator \u00b7 '+labelOf(r.status),line('Guts '+fmt(o.g.v)+' = about <b>'+fmt(r.value)+'%</b> chance to keep an HP stack when it would be lost.')+line('<i>'+esc(badge(r.status))+' The highest value the Guts stat can have is not known yet.</i>'),[['How do HP stacks work?','how do hp stacks work']]);}
+  return card('Guts','calculator \u00b7 '+labelOf(r.status),line('Guts '+fmt(o.g.v)+' = about <b>'+fmt(r.value)+'%</b> chance to keep an HP stack when it would be lost.')+line('<i>'+esc(badge(r.status))+' Guts is capped at 95% (its in-game tooltip says Max +95%), so a stack is never 100% safe.</i>'),[['How do HP stacks work?','how do hp stacks work']]);}
 function plainDrop(z){var m=/^ (?:what (?:is|are|s) )?(?:the )?(?:enemy |enemies )?drop chance (?:if it is |if |is |of |at )?(\d+(?:\.\d+)?)(?: out of 10 ?000)? $/.exec(z);return m?' freq '+m[1]+' ':null;}
 function calcDrop(z){if(!(has(z,'freq')||has(z,'weight'))){z=plainDrop(z);if(!z)return null;}var o=labelled(z,{f:['freq','weight','frequency']});if(!o.f)return null;var r=run('drop_chance',{freq:o.f.v});if(!r)return null;
   return card('Drop chance','calculator \u00b7 '+labelOf(r.status),line('A drop chance of '+fmt(o.f.v)+' (out of 10,000) drops <b>'+fmt(r.value)+'%</b> of the time at the normal rate. Capture on a boss changes the capture-item drop chance from 100 (1%) to 1000 (10%).')+line('<i>'+esc(badge(r.status))+'</i>'),[['How do drops work?','how are drops rolled']]);}
@@ -153,7 +153,7 @@ function calcStacks(z){if(!(has(z,'stack')||has(z,'stacks')))return null;
   else{L2=line('Lose '+fmt(am)+' HP stack'+(am===1?'':'s')+' from '+fmt(cur)+': if the loss goes through, the stacks drop to <b>'+fmt(rl.value)+'</b> (never below 0).');
     if(gr)L2+=line('Guts '+fmt(g)+' = about <b>'+fmt(gr.value)+'%</b> chance to keep the stacks (nothing is lost); <b>'+fmt(100-gr.value)+'%</b> of the time the loss happens.');
     else L2+=line('No Guts was given, so I counted the loss as certain. Add "guts 30" to include it.');}
-  return card('HP stacks','calculator \u00b7 '+labelOf(st2),L2+line('A loss needs the effect to hit a living target that has stacks. Only the stack count changes: HP and shield stay the same and nothing is refilled.')+line('<i>'+esc(badge(st2))+(gr?' The highest value the Guts stat can have is not known yet.':'')+'</i>'),[['How do HP stacks work?','how do hp stacks work'],['With Guts 30','I have 3 hp stacks and lose 1 with guts 30']]);}
+  return card('HP stacks','calculator \u00b7 '+labelOf(st2),L2+line('A loss needs the effect to hit a living target that has stacks. Only the stack count changes: HP and shield stay the same and nothing is refilled.')+line('<i>'+esc(badge(st2))+(gr?' Guts is capped at 95% (its in-game tooltip says Max +95%), so a stack is never 100% safe.':'')+'</i>'),[['How do HP stacks work?','how do hp stacks work'],['With Guts 30','I have 3 hp stacks and lose 1 with guts 30']]);}
 
 /* ailment chance: skill value + your Effective - target Resist, limited to 5..95 */
 function calcAilment(z){if(!(has(z,'ailment')||has(z,'status')||has(z,'debuff')||has(z,'inflict')||((has(z,'effective')||has(z,'effectiveness'))&&(has(z,'resist')||has(z,'resistance')))))return null;
@@ -208,7 +208,13 @@ function topicCard(t,z){var rules=(t.rules||[]).map(function(id){return BYID[id]
   var html=extra+line('<ul style="margin:4px 0 4px 18px;padding:0">'+head.map(ruleLine).join('')+'</ul>')+
     (more.length?'<details class="qa-fold"><summary>'+more.length+' more rule'+(more.length>1?'s':'')+'</summary><ul style="margin:4px 0 4px 18px;padding:0">'+more.map(ruleLine).join('')+'</ul></details>':'')+
     line('<i>'+(hyp?'Lines marked HYPOTHESIS are best guesses; the rest are checked.':'Checked.')+'</i>');
-  return card(t.title,'game rule \u00b7 '+(hyp?'partly estimate':'computed'),html,(t.chips||[]).concat(CHIPS).slice(0,3));}
+  /* v153: the examples are labelled, and the same calculator Challenge me opens can be opened here, inside this card */
+  var CALC={hp_shield:'maxhp',hit:'hit',ailment:'ailment',crit:'crit',damage_chain:'damage',armor:'armor',parry:'parry',death:'stacks',turn:'first',enemy_ai:'pick',drops:'drop'}[t.id];
+  var ex=(t.chips||[]).concat(CHIPS).slice(0,3);
+  html+=line('<span class="qa-lab">Try it</span> tap an example'+(CALC?', or test the rule on your own numbers:':':'))+
+    '<div class="qa-ex">'+ex.map(function(c){return '<button type="button" class="qa-exbtn" data-ex="'+esc(c[1])+'">'+esc(c[0])+'</button>';}).join('')+'</div>'+
+    (CALC?'<div><button type="button" class="chbtn" data-opencalc="'+CALC+'">Open calculator to test it</button></div>':'');
+  return card(t.title,'game rule \u00b7 '+(hyp?'partly estimate':'computed'),html,[]);}
 
 function handle(raw,c,sl){var z=norm(raw),ents=(sl&&sl.ents)||[],own=!ents.length,r,t;
   r=simulate(raw,z,c);if(r)return r;

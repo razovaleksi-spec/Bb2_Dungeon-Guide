@@ -17,7 +17,7 @@ var CS=[
 {id:'ailment',n:'Ailment chance',l:'c',f:[['s','Skill value',40,100],['e','Your Effective',0,50],['r','Target Resist Ailment',0,60],['oe','This ailment\'s own Effective (0 if none)',0,20],['or','This ailment\'s own Resist (0 if none)',0,20]],
  run:function(v){var w=v.s+v.e+v.oe-v.r-v.or,c=C(w,5,95);return {m:c+'% ailment chance',s:[v.s+' + '+v.e+' + '+v.oe+' - '+v.r+' - '+v.or+' = '+w,'Limited to 5..95 = '+c],n:'Extra modifiers are not included.'};}},
 {id:'stacks',n:'HP stacks (gain, lose, reset)',l:'e',f:[['c','Stacks you have now',0,5],['m','Maximum stacks',3,9],['g','Amount gained or lost',1,3],['u','Guts % (only matters when losing)',0,60]],
- run:function(v){var gain=Math.max(v.c,Math.min(v.m,v.c+v.g)),lose=Math.max(0,v.c-R(v.g));return {m:'Gain: '+gain+' | Lose: '+lose+' | Reset: '+v.m,s:['Gain: '+v.c+' + '+v.g+', capped at max '+v.m+' = '+gain,'Lose: '+v.c+' - '+R(v.g)+', not below 0 = '+lose,'Guts: '+C(v.u,0,100)+'% chance the stack is kept (you stay at '+v.c+')','Reset: stacks go to the maximum = '+v.m],n:'The Guts number is an estimate; ask the game for your real Guts.'};}},
+ run:function(v){var gain=Math.max(v.c,Math.min(v.m,v.c+v.g)),lose=Math.max(0,v.c-R(v.g));return {m:'Gain: '+gain+' | Lose: '+lose+' | Reset: '+v.m,s:['Gain: '+v.c+' + '+v.g+', capped at max '+v.m+' = '+gain,'Lose: '+v.c+' - '+R(v.g)+', not below 0 = '+lose,'Guts: '+C(v.u,0,95)+'% chance the stack is kept (you stay at '+v.c+'); Guts is capped at 95%','Reset: stacks go to the maximum = '+v.m],n:'Guts can be at most 95% (its in-game tooltip), so a stack is never 100% safe. Use your real Guts from the game.'};}},
 {id:'damage',n:'Damage with bonuses and cap',l:'c',f:[['d','Base damage',1000,2000000],['a','Bonus A %',0,150],['b','Bonus B %',0,150],['c','Bonus C % (0 if none)',0,100]],
  run:function(v){var p=(1+v.a/100)*(1+v.b/100)*(1+v.c/100),t=R(v.d*p),r=Math.min(t,9999999),s=R(v.d*(1+(v.a+v.b+v.c)/100));return {m:N(r)+' damage'+(t>9999999?' (capped)':''),s:[N(v.d)+' x '+F(1+v.a/100)+' x '+F(1+v.b/100)+' x '+F(1+v.c/100)+' = '+N(t),'Adding the bonuses instead would give '+N(s)+', so multiplying is worth more.'],n:'Applies to bonuses in different steps of the damage chain. One hit is capped at 9,999,999.'};}},
 {id:'drop',n:'Drop chance',l:'c',f:[['q','Drop chance (%)',1,10],['r','Drop rate % (100 = normal)',50,200]],
@@ -35,9 +35,14 @@ function update(){var c=now,v={},ok=true;c.f.forEach(function(x,i){var n=parseFl
   if(!ok){res.innerHTML='<div class="qa-line">Type a number in every box, or tap <b>Random example</b>.</div>';return;}
   var r=c.run(v);res.innerHTML='<div class="qa-note">'+esc(c.n)+' \u00b7 '+(c.l==='c'?'computed (checked)':'estimate (best guess, not confirmed)')+'</div><div class="qa-line"><b style="font-size:18px">'+esc(r.m)+'</b></div>'+r.s.map(function(x){return '<div class="qa-line">'+esc(x)+'</div>';}).join('')+'<div class="qa-note">'+esc(r.n)+'</div>';}
 function render(){fl.innerHTML=now.f.map(function(x){return '<label class="cf"><span>'+esc(x[1])+'</span><input type="number" inputmode="decimal" step="any" placeholder="for example '+Math.round((x[2]+x[3])/2)+'"></label>';}).join('');update();}
-function rnd(){now.f.forEach(function(x,i){var lo=x[2],hi=x[3],v=lo+Math.floor(Math.random()*(hi-lo+1));if(hi-lo>=10000)v=Math.round(v/1000)*1000;fl.children[i].querySelector('input').value=v;});update();}
+function rnd(){now.f.forEach(function(x,i){var lo=x[2],hi=x[3],v=lo+Math.floor(Math.random()*(hi-lo+1));if(hi-lo>=10000)v=Math.round(v/1000)*1000;fl.children[i].querySelector('input').value=v;});
+  /* v153: an example never has more stacks than the maximum */
+  if(now.id==='stacks'){var ci=fl.children[0].querySelector('input'),mi=fl.children[1].querySelector('input');if(+ci.value>+mi.value)ci.value=mi.value;}
+  update();}
 fl.addEventListener('input',update);cb.querySelector('#calcRnd').addEventListener('click',rnd);cb.querySelector('#calcClr').addEventListener('click',render);
 function fill(vals){now.f.forEach(function(x,i){fl.children[i].querySelector('input').value=vals[i];});update();}
-W.__openCalc=function(id,sample,vals){var host=D.querySelector('#qaOut .qa-card');if(!host)return;
+W.__openCalc=function(id,sample,vals,hostEl){var host=hostEl||D.querySelector('#qaOut .qa-card');if(!host)return;
   for(var i=0;i<CS.length;i++)if(CS[i].id===id){now=CS[i];cb.querySelector('#calcName').textContent='Test the formula on your own numbers: '+now.n;host.appendChild(cb);render();if(vals&&vals.length===now.f.length)fill(vals);else if(sample)rnd();try{cb.scrollIntoView({block:'nearest',behavior:'smooth'});}catch(e){}return;}};
+/* v153: "Open calculator to test it" on a rules card opens the calculator inside THAT card, with example numbers */
+try{D.getElementById('qaOut').addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('[data-opencalc]');if(!b)return;e.preventDefault();W.__openCalc(b.getAttribute('data-opencalc'),true,null,b.closest('.qa-card'));});}catch(e){}
 })();

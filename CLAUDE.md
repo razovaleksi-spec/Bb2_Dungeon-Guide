@@ -29,15 +29,28 @@
 - Pictures: lossless WebP, tight square, 116x116 for icons (crop spec in the user's entry save point).
 
 ## Current state (VERIFIED 2026-11-04)
-- src/ = v148 (md5 b360ff7fa525f5e3c1aedbdc4c434c75). v148 = v147 + "Did you mean" for misspelled names. NOT approved yet
-  (user still has to try it on the phone). Last approval on record = v132.
+- src/ = v149 (built file Bb2dungeon-ESv4v149.html). NOT approved yet. Last approval on record = v132.
+  v149 = v148 + Ask core v2 (src/js/56_ask-core-v2-understanding.js) + QA.first in the QA core (33) + the Intent layer (26)
+  no longer swaps a core card. User rule (2026-11-04): restructure freely, but a change must IMPROVE Ask box answers.
+- v148 = v147 + "Did you mean" for misspelled names (md5 b360ff7fa525f5e3c1aedbdc4c434c75), not approved yet either.
+- Ask core v2 = ONE understanding record (QA.understand) + conversation memory (QA.state.core2.last) + plans. It runs FIRST
+  (QA.first handler, outermost __qaPre stage 1000, __qaMulti for typed AND tapped questions) and only acts when sure;
+  otherwise every question goes the old way. It reuses the old engine (__qaAnswer, the strategy add-on) inside its cards.
+  Its cards carry data-core2 + data-keep (chat layers leave them alone). Test hooks: QA.core2.plan(q) / .html(q) / .last().
 - tests/golden.json = recorded from v148: 0 page errors, tables 22 / 17 / 23 / 2, 499 names x 3 forms, 168 typed questions.
   v147 against it = 13 answers differ (the 12 typo corrections + "asdkjh" wording) = as expected.
+  v149 against it = 0 name readings changed; 13 answers changed = the 12 intended fixes + "asdkjh" (random wording only).
+  tests/questions.json now has 17 more questions at the end (not in golden yet): record golden after the user OKs v149.
+- Known: debug panels ("What I understood · awareness check") can sit ON TOP of a good answer (e.g. "how many hp stacks
+  can i have at most"). Next step A5 hides them.
 - Phone-speed test (CPU slowed 4x): first paint 0.9 s, fully loaded 7.4 s, Ask answers 0.3-0.6 s.
 - Known gap: the index "Conquests (22)" is missing Land Devourer (table has 23). Not fixed yet.
 
 ## Plan (do ONE, hand over, ask before the next)
 - P1 DONE 2026-11-04: split into src/ + build.py (byte-identical) + test bank.
+- P2 STARTED in v149 (fixed: filter follow-ups incl. chains, run-count maths, "no 7 star X" places, DEX/any-stat build +
+  where to farm, vague farm -> tap choices, A-or-B for a tank, "is X good", max/cap from tooltips, crafting honesty,
+  short status terms + related stats, "good against <boss>" honesty). Still to do in P2: unknown input wording (A5).
 - P2 Ask box 2.0 core: ONE understanding record {intent, names, filters (stars, slot, stat, dungeon), "no/without", "A or B",
   confidence} shared by every layer; one answer per intent, drawn ONCE (today 6 watchers rewrite answers after showing,
   35 places re-read the raw typed text). Low confidence -> "I read this as ___" + 2-3 tap choices. Follow-ups change one

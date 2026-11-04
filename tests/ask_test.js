@@ -58,6 +58,7 @@ const SEED = '(()=>{let s=12345;Math.random=function(){s=(s*1103515245+12345)%21
     console.log('recorded tests/golden.json from', now.html);
     process.exit(errors.length ? 1 : 0);
   }
+  fs.writeFileSync(path.join(__dirname, 'last_run.json'), JSON.stringify(now, null, 1) + '\n');   // full answers, to compare long ones
   const old = JSON.parse(fs.readFileSync(GOLDEN, 'utf8'));
   let bad = errors.length;
   if (String(old.tables) !== String(tables)) { bad++; console.log(`TABLES changed: ${old.tables} -> ${tables}`); }

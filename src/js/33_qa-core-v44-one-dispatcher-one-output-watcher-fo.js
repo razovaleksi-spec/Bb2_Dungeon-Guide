@@ -9,6 +9,8 @@
 var H=[],V=[];
 var QA=W.QA=W.QA||{};QA.go=go;QA.inp=inp;QA.out=out;QA.state=QA.state||{orig:''};
 QA.on=function(id,fn,o){H.push({id:id,fn:fn,ime:!(o&&o.ime===false)});};
+/* v149: QA.first puts a handler BEFORE all others (the Ask core v2 uses it: it answers only when it is sure, else it returns false). */
+QA.first=function(id,fn,o){H.unshift({id:id,fn:fn,ime:!(o&&o.ime===false)});};
 QA.watch=function(id,fn){V.push({id:id,fn:fn});};
 QA.show=function(html){out.innerHTML=html;try{out.scrollIntoView({block:'nearest',behavior:'smooth'});}catch(x){}};
 QA.list=function(){return {handlers:H.map(function(h){return h.id;}),watchers:V.map(function(v){return v.id;})};};

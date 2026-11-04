@@ -151,6 +151,7 @@ function decide(raw,base){var c=classify(raw),sl=slotsOf(raw),weak=!good(base),r
   else if(c.intent==='other'&&c.conf>=0.7&&!sl.ents.length&&!sl.goal){pending={html:DIRECT.other(),t:Date.now()};res=raw;}
   S.last=c.intent;return res;}
 function apply(){if(!pending)return;var p=pending;pending=null;if(Date.now()-p.t>2500)return;
+  if(O.querySelector('[data-core2]'))return; /* v149: the Ask core v2 already answered from the guide data; do not swap its card */
   if(p.after&&p.html){O.insertAdjacentHTML('beforeend',p.html);}else if(p.html){O.innerHTML=p.html;}
   else if(p.note){var d=document.createElement('div');d.className='qa-line';d.setAttribute('data-intent-note','1');d.style.cssText='font-size:12px;opacity:.75;margin:0 0 6px';d.textContent=p.note;O.insertBefore(d,O.firstChild);}}
 new MutationObserver(function(){if(!pending)return;clearTimeout(tm);tm=setTimeout(apply,70);}).observe(O,{childList:true,subtree:true});

@@ -5088,6 +5088,21 @@ function titleKind(sub){
       const src = askIcon(kind, nm);
       if(src) t.insertBefore(pic('game-icon pt-icon', src), t.firstChild);
     });
+    out.querySelectorAll('.qa-card .qa-title').forEach(function(t){
+      const sub = t.querySelector('.qa-sub'), kind = sub ? titleKind(sub.textContent) : '';
+      if((kind === 'skill' || kind === 'rune') && !t.querySelector('.qa-chip, .term-link')){
+        const tn = [].filter.call(t.childNodes, function(n){ return n.nodeType === 3 && n.nodeValue.trim(); })[0];
+        if(tn){
+          const nm = tn.nodeValue.trim(), st = (/([1-7])★/.exec(sub.textContent) || [])[1];
+          let el = null;
+          if(kind === 'skill' && kbSkill(nm)){ const sk = kbSkill(nm); el = skillChip({textContent: nm}, {n: sk.n, st: +(st || sk.st)}); const ic = el.querySelector('.qa-chip-ic'); if(ic) ic.remove(); }
+          else if(kind === 'rune' && typeof RUNE_DETAILS !== 'undefined' && RUNE_DETAILS[nm]){ el = document.createElement('span'); el.className = 'term-link pt-go'; el.setAttribute('data-rn', nm); el.textContent = nm; }
+          if(el) t.replaceChild(el, tn);
+        }
+      }
+      const ic = t.querySelector('.pt-icon');
+      if(ic && !ic.hasAttribute('data-tap') && t.querySelector('.qa-chip, .ct-open, .pt-go')){ ic.setAttribute('data-tap', '1'); ic.style.cursor = 'pointer'; }
+    });
     out.querySelectorAll('.qa-card .item.qa-chip[data-item]').forEach(function(c){
       if(c.querySelector('.qa-chip-ic') || (c.closest('.qa-title') && c.closest('.qa-title').querySelector('.pt-icon'))) return;
       const src = askIcon(c.getAttribute('data-slot') || 'skill', c.getAttribute('data-item'));
@@ -5156,18 +5171,26 @@ function titleKind(sub){
     });
     decorate();
   }
+  const SK_ALIAS = {'warcry': 'War Cry', 'quickshot': 'Quick Shot', 'backstab': 'Back Stab', 'entangling roots': 'Entagling Roots',
+    'black sphere': 'Biack Sphere', 'cannon': 'Cannon Blast', 'throw edge': 'Throw Blades', 'dark sword': 'Sword of Darkness'};
   const STAT_ABBR = {STR: 'STRength', DEX: 'DEXterity', INT: 'INTelligence', PIE: 'PIEty'};
   const reEsc = function(x){ return x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
   let RX = null;
   function rx(){
     if(RX) return RX;
     const runes = typeof RUNE_DETAILS !== 'undefined' ? Object.keys(RUNE_DETAILS) : [];
-    const skills = Object.keys(contractIndex().kb).map(function(k){ return contractIndex().kb[k][1]; });
+    const skills = Object.keys(contractIndex().kb).map(function(k){ return contractIndex().kb[k][1]; }).concat(Object.keys(SK_ALIAS));
     const alt = function(list){ return list.slice().sort(function(a, b){ return b.length - a.length; }).map(reEsc).join('|'); };
     RX = {stat: /\b(STRength|DEXterity|INTelligence|PIEty|STR|DEX|INT|PIE)\b/g, label: /\b(Runes|Skills|Equipment Parts|Equipment):/g,
           rune: runes.length ? new RegExp('(^|[\\s,:])(' + alt(runes) + ')(?=$|[\\s,.;])', 'g') : null,
-          skill: skills.length ? new RegExp('(^|[\\s,:])(' + alt(skills) + ')(?=$|[\\s,.;])', 'g') : null};
+          skill: skills.length ? new RegExp('(^|[\\s,:])(' + alt(skills) + ')(?=$|[\\s,.;])', 'gi') : null};
     return RX;
+  }
+  function skillName(t){
+    const k = String(t).toLowerCase(), kb = contractIndex().kb, a = SK_ALIAS[k] || SK_ALIAS[t];
+    if(kb[k]) return kb[k][1];
+    if(a && kb[a.toLowerCase()]) return kb[a.toLowerCase()][1];
+    return '';
   }
   function hits(text, runeCard){
     const r = rx(), found = [];
@@ -5179,7 +5202,8 @@ function titleKind(sub){
       const re = l.kind && r[l.kind]; if(!re) return;
       const end = i + 1 < labs.length ? labs[i + 1].at : text.length, seg = text.slice(l.at, end);
       re.lastIndex = 0;
-      while((m = re.exec(seg))){ const a = l.at + m.index + m[1].length; found.push({a: a, b: a + m[2].length, kind: l.kind, name: m[2]}); }
+      while((m = re.exec(seg))){ const a = l.at + m.index + m[1].length, nm = l.kind === 'skill' ? skillName(m[2]) : m[2];
+        if(nm) found.push({a: a, b: a + m[2].length, kind: l.kind, name: nm}); }
     });
     return found.sort(function(x, y){ return x.a - y.a; }).filter(function(h, i, arr){ return !i || h.a >= arr[i - 1].b; });
   }
@@ -5210,6 +5234,10 @@ function titleKind(sub){
       n.parentNode.replaceChild(frag, n);
     });
   }
+  out.addEventListener('click', function(e){
+    const ic = e.target.closest && e.target.closest('.pt-icon[data-tap]');
+    if(ic){ const nm = ic.parentNode && ic.parentNode.querySelector('.qa-chip, .ct-open, .pt-go'); if(nm){ e.preventDefault(); e.stopPropagation(); nm.click(); } return; }
+  }, true);
   out.addEventListener('click', function(e){
     const g = e.target.closest && e.target.closest('.pt-go');
     if(!g) return;
@@ -6762,6 +6790,7 @@ var STR=(function(){
   var btn=function(r){return '<button type="button" class="qa-exbtn" data-ex="'+qe('Tell me about '+r.n)+'">'+qe(r.n)+'</button>';};
   var chips=function(a){return '<div class="qa-ex">'+a.map(btn).join('')+'</div>';};
   var line=function(l,t){return '<div class="qa-line"><span class="qa-lab">'+qe(l)+'</span> '+t+'</div>';};
+  var skC=function(r){var st=Math.max(1,Math.min(7,+r.st||0));return (typeof SKILL_DETAILS!=='undefined'&&SKILL_DETAILS[r.n])||!r.st?skN(r):nameChip(r.n,'skill',st);};
   var skN=function(r,bold){var n=r.n;if(typeof SKILL_DETAILS!=='undefined'&&SKILL_DETAILS[n])return nameChip(n,'skill',r.st>=7?7:6);return bold===false?qe(n):'<b>'+qe(n)+'</b>';};
   var lineH=function(l,t){return '<div class="qa-line"><span class="qa-lab">'+l+'</span> '+t+'</div>';};
   var title=function(t,s){return '<div class="qa-title">'+qe(t)+'<span class="qa-sub">'+qe(s)+'</span></div>';};
@@ -6888,7 +6917,9 @@ var STR=(function(){
     var h=title('Comparison','from the guide data');
     if(list.every(function(o){return o.t&&o.max!==undefined;})){
       var cols=[['Rarity',function(r){return r.st?r.st+'\u2605':'not listed';}],['Damage',dmgTxt],['Cooldown',function(r){var x=X(r);return x.cd===null?'not listed':x.cd+' turn(s)';}],['Uses',usesTxt],['Scales with',function(r){var x=X(r);return x.scales.length?x.scales.map(function(s){return '+'+s[0]+'% per '+s[1];}).join(', '):'no scaling listed';}],['Removes HP stacks',function(r){return r.stack?'yes':'no';}]];
-      cols.forEach(function(c){h+=line(c[0],list.map(function(r){return skN(r)+' '+qe(c[1](r));}).join(' \u00b7 '));});
+      cols.forEach(function(c){h+=line(c[0],list.map(function(r){return skC(r)+' '+qe(c[1](r));}).join(' \u00b7 '));});
+      h+=line('What it does',list.map(function(r){var t=String(r.t||'').split(FORMSEP)[0].replace(/^\s*[1-7]\u2605\s*/,'').replace(/\s*(Cooldown:|Remaining Uses:).*$/,'').replace(/\[[^\]]{1,40}\]\s*/g,'').replace(/\s+/g,' ').trim();
+        return skC(r)+' '+qe(t.length>140?t.slice(0,140).replace(/\s+\S*$/,'')+'\u2026':t);}).join(' \u00b7 '));
     }else{
       if(window.__qaMixRows&&list.length>=2&&list.every(function(o){return o.f;})&&!list.every(function(o){return o.kind===list[0].kind;})){
         var ku=[];list.forEach(function(o){if(ku.indexOf(o.kind)<0)ku.push(o.kind);});
@@ -6903,7 +6934,7 @@ var STR=(function(){
         pref.forEach(function(k){if(!list.some(function(o){return o.f[k];}))return;g+='<div class="qa-lab">'+qe(k)+'</div>'+list.map(function(o){return '<div>'+(o.f[k]?qe(plainT(o.f[k])):'\u2013')+'</div>';}).join('');});
         return '<div data-vs="1">'+title(list.map(function(o){return o.n;}).join(' vs '),pl)+'<div class="qa-lead">The guide does not rank '+pl+'.</div>'+g+'</div></div>';
       }
-      list.forEach(function(o){if(o.f)h+='<div class="qa-line"><b>'+qe(o.n)+'</b> ('+o.kind.toLowerCase()+')</div>'+entLines(o);else h+='<div class="qa-line">'+skN(o)+' (skill)</div>'+factsLines(o);});
+      list.forEach(function(o){if(o.f)h+='<div class="qa-line"><b>'+qe(o.n)+'</b> ('+o.kind.toLowerCase()+')</div>'+entLines(o);else h+='<div class="qa-line">'+skC(o)+' (skill)</div>'+factsLines(o);});
     }
     return h;
   }
@@ -7474,6 +7505,12 @@ var STR=(function(){
     return {kind:'boost',html:card(h),ctx:ctx.slice(0,5800),names:[r.n]};
   }
   function entBtn(a){return '<button type="button" class="qa-exbtn" data-ex="'+qe('Tell me about '+a.n)+'">'+qe(a.n)+'</button>';}
+  function skillCard(r){
+    var drops=typeof SKILL_DETAILS!=='undefined'&&!!SKILL_DETAILS[r.n],inCt=!drops&&KBJ.some(function(e){return e[0]==='Contract'&&wb(String(e[2]),r.n);});
+    var b=drops?'<button type="button" class="qa-exbtn" data-ex="'+qe('Where does '+r.n+' drop?')+'">Where does it drop?</button>':inCt?'<button type="button" class="qa-exbtn" data-ex="'+qe('Where do I get '+r.n+'?')+'">Where do I get it?</button>':'';
+    return {kind:'skillfacts',html:card(factsCard(r)+(b?'<div class="qa-ex">'+b+'</div>':'')),ctx:PRE2+ctxRow(r),names:[r.n]};
+  }
+  function factsFor(n){var r=byN[norm(n)];return r?skillCard(r):null;}
   var STOP={what:1,which:1,tell:1,about:1,does:1,show:1,skill:1,skills:1,there:1,these:1,those:1,their:1,would:1,could:1,should:1,where:1,boss:1,bosses:1,drop:1,drops:1,after:1,other:1,first:1,early:1,stack:1,stacks:1,power:1,magic:1,damage:1,speed:1,range:1};
   function correct(q){
     var toks=String(q).toLowerCase().replace(/[^a-z0-9' ]+/g,' ').split(/\s+/).filter(Boolean),best=null;
@@ -7497,7 +7534,7 @@ var STR=(function(){
     if(ns.length===1&&/\b(good|worth\w*|useful|usable|viable|decent|any good|bad|weak|strong)\b/.test(s)&&!/\b(drop|drops|dropped|where|which|best|strongest)\b/.test(s)){
       var r2=ns[0];return {kind:'skillfacts',html:card(factsCard(r2,'The guide lists these numbers for '+r2.n+'. It does not rate skills.')+'<div class="qa-ex"><button type="button" class="qa-exbtn" data-ex="'+qe('How do I make '+r2.n+' stronger?')+'">Ways to make it stronger</button></div>'),ctx:PRE2+ctxRow(r2),names:[r2.n]};}
     if(ns.length===1&&/^(what|whats|what's)\s+(does|do|is|are)\b|^(tell me about|explain|describe|info on|information on)\b/.test(s)&&!STATD[ns[0].n.toLowerCase()]&&!/\b(drop|drops|dropped|where)\b/.test(s)){
-      var r1=ns[0];return {kind:'skillfacts',html:card(factsCard(r1)+'<div class="qa-ex"><button type="button" class="qa-exbtn" data-ex="'+qe('Where does '+r1.n+' drop?')+'">Where does it drop?</button></div>'),ctx:PRE2+ctxRow(r1),names:[r1.n]};}
+      return skillCard(ns[0]);}
     var ef=effectDetect(s);if(ef)return ef;
     var old=detectOld(q,unmatched);if(old)return old;
     if(unmatched){var rkf=runeKwFallback(s);if(rkf)return rkf;}
@@ -7514,7 +7551,7 @@ var STR=(function(){
     var cr=correct(q);if(!cr)return null;
     return {fixed:String(q).toLowerCase().replace(cr.span,cr.c.n.toLowerCase()),name:cr.c.n};
   }
-  return {rows:rows,X:X,detect:detect,fallback:fallback,corrected:corrected,burst:burst,stackers:stackers,refillers:refillers,scalers:scalers,early:early,byN:byN};
+  return {rows:rows,X:X,detect:detect,fallback:fallback,corrected:corrected,burst:burst,stackers:stackers,refillers:refillers,scalers:scalers,early:early,byN:byN,facts:factsFor};
 })();
 window.__qaStrat=STR;
 window.__qaSuggest=function(x){return suggestFor(x);};
@@ -7800,7 +7837,17 @@ if(inp&&out){
   if(document.readyState!=='loading')showIdeas();
   window.__qaShowIdeas=showIdeas;
   qaLazyWatch();
-  ex.addEventListener('click',function(e){if(e.target.closest('.qa-shuffle')){showIdeas();return;}fill(e);});
+  var replaceIdea=function(b){
+    var shown=[].map.call(ex.querySelectorAll('.qa-exbtn[data-ex]'),function(x){return x.getAttribute('data-ex');});
+    qaIdeasAsync(4,function(list){
+      if(!b.isConnected)return;
+      var nq=list.filter(function(q){return shown.indexOf(q)<0;})[0];if(!nq)return;
+      var nb=document.createElement('button');nb.type='button';nb.className='qa-exbtn';nb.setAttribute('data-ex',nq);nb.textContent=nq;
+      b.parentNode.replaceChild(nb,b);
+    },function(){return b.isConnected;});
+  };
+  ex.addEventListener('click',function(e){if(e.target.closest('.qa-shuffle')){showIdeas();return;}
+    var b=e.target.closest('.qa-exbtn');fill(e);if(b&&b.hasAttribute('data-ex')&&ex.contains(b))replaceIdea(b);});
   out.addEventListener('click',fill);
   out.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('[data-lootopen]');if(!a)return;e.preventDefault();try{window.openLoot(a.getAttribute('data-lootopen'));}catch(x){}});
 }
@@ -8367,7 +8414,21 @@ function init(){
 function initKN(){KN={};((window.__guideText?window.__guideText():'').toLowerCase().match(/[a-z]{4,}/g)||[]).forEach(function(w){KN[w]=(KN[w]||0)+1;});try{if(D)Object.keys(D).forEach(function(w){if(w.length>=4&&!KN[w])KN[w]=1;});}catch(e){}
   'health defense defence resistance survival intelligence strength accessory accessories critical evasion healing shield weapons armour summons poison damage cooldown'.split(' ').forEach(function(w){if(!KN[w])KN[w]=1;});}
 function dist(a,b){var p=[],i,j,c;for(j=0;j<=b.length;j++)p[j]=j;for(i=1;i<=a.length;i++){var d=p[0];p[0]=i;for(j=1;j<=b.length;j++){c=p[j];p[j]=Math.min(p[j]+1,p[j-1]+1,d+(a.charAt(i-1)===b.charAt(j-1)?0:1));d=c;}}return p[b.length];}
-function syn(q){return q.replace(/[A-Za-z]+/g,function(m){var k=m.toLowerCase();return(D[k]&&!PRO[k])?D[k]:m;});}
+var PN=null;
+function protectedNames(){
+  if(PN)return PN;PN=[];var seen={};
+  function push(n){var w=String(n||'').toLowerCase().match(/[a-z0-9]+/g)||[];if(w.length<2||seen[w.join(' ')])return;
+    if(!w.some(function(x){return D[x]&&!PRO[x];}))return;seen[w.join(' ')]=1;
+    PN.push(new RegExp('(?<![a-z0-9])'+w.join('[^a-z0-9]+')+'(?![a-z0-9])','gi'));}
+  try{JSON.parse(document.getElementById('qaKB').textContent).forEach(function(r){push(r[1]);});}catch(e){}
+  [typeof RUNE_DETAILS!=='undefined'?RUNE_DETAILS:{},typeof CONTRACT_DETAILS!=='undefined'?CONTRACT_DETAILS:{},typeof SKILL_DETAILS!=='undefined'?SKILL_DETAILS:{},
+   typeof STATS!=='undefined'?STATS:{},typeof TERMS!=='undefined'?TERMS:{}].forEach(function(o){Object.keys(o).forEach(push);});
+  if(typeof ITEM_DETAILS!=='undefined')Object.keys(ITEM_DETAILS).forEach(function(k){var d=ITEM_DETAILS[k];push(k.split('::')[0]);
+    (d.abilities||(d.ability?[d.ability]:[])).forEach(function(a){if(a)push(a.name);});});
+  return PN;}
+function syn(q){var keep=[];
+  protectedNames().forEach(function(re){var m;re.lastIndex=0;while((m=re.exec(q)))keep.push([m.index,m.index+m[0].length]);});
+  return q.replace(/[A-Za-z]+/g,function(m,at){if(keep.some(function(k){return at>=k[0]&&at<k[1];}))return m;var k=m.toLowerCase();return(D[k]&&!PRO[k])?D[k]:m;});}
 function typo(q){if(!KN)initKN();return q.replace(/[A-Za-z]{5,}/g,function(m){
   var k=m.toLowerCase();if(KN[k]||D[k]||PRO[k]||(window.__qaKnown&&window.__qaKnown(k)))return m;
   var lim=k.length<=7?1:2,best=null,bd=9,w,d;
@@ -8383,7 +8444,9 @@ function backs(h,b,t){
 }
 function understood(q){try{return !!(window.__qaUnderstood&&window.__qaUnderstood(q));}catch(e){return false;}}
 function sem(q){
-  init();var u=syn(q);
+  init();
+  try{if(window.QA.core2&&window.QA.core2.nameOnly&&window.QA.core2.nameOnly(q))return q;}catch(e){}
+  var u=syn(q);
   if(u!==q&&!BAD.test(ans(u)))return u;
   if(BAD.test(ans(q))&&!understood(q)){var b=u!==q?u:q,t=typo(b);if(t!==b){var h=ans(t);if(!BAD.test(h)&&backs(h,b,t))return t;}}
   try{if(BAD.test(ans(q))&&!understood(q)){var b2=u!==q?u:q,t2=typo(b2);if(t2!==b2&&!BAD.test(ans(t2)||'')&&understood(t2))return t2;}}catch(e){}
@@ -8807,6 +8870,15 @@ function dropsOf(e){
   var it=e.it;if(!it||!it.bosses.length)return it&&it.special?'special drop':'';
   return it.bosses.slice(0,2).map(bossChip).join(' ')+(it.bosses.length>2?' +'+(it.bosses.length-2):'');
 }
+var HAS={};
+function hasQ(q){if(q in HAS)return HAS[q];
+  var U=window.__qaUnderstanding,ap=U&&U.applyTo,og=window.__qaOrig,P2=null,R=null;
+  try{if(U)U.applyTo=null;window.__qaOrig=q;P2=parse(q);R=solve(P2);}catch(e){R=null;}finally{if(U)U.applyTo=ap;window.__qaOrig=og;}
+  if(!R||!P2)return (HAS[q]=true);
+  var sk=P2.slot==='skill'||!P2.slot,gs=P2.slot&&P2.slot!=='skill'?[P2.slot]:P2.slot==='skill'?[]:['weapon','armor','accessory'];
+  var any=gs.some(function(sl){return (R.gear[sl]||[]).length>0;})||(sk&&(P2.exclude||[]).indexOf('skill')<0&&(R.skills||[]).length>0);
+  return (HAS[q]=any);}
+function btnIf(label,q){return hasQ(q)?askBtn(label,q):'';}
 function render(P,R){
   var X=ix(),n=P.more?9:4,h='',ctx=[];
   var EXN=(P.exclude||[]).map(function(k){return SLN[k]?SLN[k][1]:k;});
@@ -8839,6 +8911,15 @@ function render(P,R){
       });
       ctx.push('Skills: '+sk.map(function(x){return x.r.n+' ('+x.r.t.slice(0,120).replace(/\s+/g,' ')+')';}).join('; '));
     }
+  }
+  if(!shown&&(P.slot||P.star)){
+    var what=(P.star?P.star+'\u2605 ':'')+(P.slot?SLN[P.slot][1]:'gear'),alt='';
+    ['armor','weapon','accessory','skill'].forEach(function(sl){if(sl===P.slot)return;var q1=P.star?buildQ(P,SLN[sl][1]+' '+P.star+' star'):'';
+      alt+=q1&&hasQ(q1)?askBtn(cap(SLN[sl][1])+' '+P.star+'\u2605',q1):btnIf(cap(SLN[sl][1]),buildQ(P,SLN[sl][1]));});
+    if(P.star)alt+=btnIf('Any rarity',buildQ(P,P.slot?SLN[P.slot][1]:'gear'));
+    var h0=title('Built for: '+goalText(P),'worked out from the guide\'s own tables');
+    h0+='<div class="qa-line">No '+QE(what)+' in the guide fit this build.'+(alt?' These do:':'')+'</div>'+(alt?'<div class="qa-ex">'+alt+'</div>':'');
+    return {kind:'reason',html:'<div class="qa-card" data-rc="1">'+h0+'</div>',ctx:null,names:[]};
   }
   if(!shown){return clarify(P,'Nothing in the guide scored well for "'+goalText(P)+'" with those filters.');}
   var cd=[];['Race','Job','Origin'].forEach(function(k){
@@ -8882,12 +8963,12 @@ function render(P,R){
   w+='<div class="qa-line">This is a relevance match to your goal, not proof that one option wins in every build.</div>';
   h+='<details class="qa-more qa-fold"'+explainOpen+'><summary>Why these?</summary>'+w+'</details>';
   var f='';
-  if(P.slot!=='armor')f+=askBtn('Armor only',buildQ(P,'armor'));
-  if(P.slot!=='weapon')f+=askBtn('Weapons only',buildQ(P,'weapons'));
-  if(P.slot!=='accessory')f+=askBtn('Accessories only',buildQ(P,'accessories'));
-  if(P.slot!=='skill')f+=askBtn('Skills only',buildQ(P,'skills'));
-  if(P.star!==7)f+=askBtn('7\u2605 only',buildQ(P,(P.slot?SLN[P.slot][1]:'gear')+' 7 star'));
-  if(P.star!==6)f+=askBtn('6\u2605 only',buildQ(P,(P.slot?SLN[P.slot][1]:'gear')+' 6 star'));
+  if(P.slot!=='armor')f+=btnIf('Armor only',buildQ(P,'armor'));
+  if(P.slot!=='weapon')f+=btnIf('Weapons only',buildQ(P,'weapons'));
+  if(P.slot!=='accessory')f+=btnIf('Accessories only',buildQ(P,'accessories'));
+  if(P.slot!=='skill')f+=btnIf('Skills only',buildQ(P,'skills'));
+  if(P.star!==7)f+=btnIf('7\u2605 only',buildQ(P,(P.slot?SLN[P.slot][1]:'gear')+' 7 star'));
+  if(P.star!==6)f+=btnIf('6\u2605 only',buildQ(P,(P.slot?SLN[P.slot][1]:'gear')+' 6 star'));
   if(!P.more)f+=askBtn('Show more',buildQ(P,'show more '+(P.slot?SLN[P.slot][1]:'gear')));
   var rel=uniq((FAMILY[P.cs[0]]||[]).slice(0,2));
   rel.forEach(function(id){f+=askBtn('Also: '+CID[id].label,'gear for a '+CID[id].adj+' build');});
@@ -9496,6 +9577,8 @@ function install(){
     try{
       if(!String(raw||'').trim())return P1?P1(raw):raw;
       if(PRON.test(raw)&&P1){var b0=P1(raw);if(b0!==raw)return b0;}
+      if(W.ASK&&W.ASK.isRuleChip&&W.ASK.isRuleChip(raw))return P1?P1(raw):raw;
+      if(W.ASK&&W.ASK.isSimulate&&W.ASK.isSimulate(raw))return P1?P1(raw):raw;
       var qi=W.document.getElementById('qaInput');
       var d=decide(raw,!qi||raw===qi.value);
       if(d!==null)return d;
@@ -9898,7 +9981,7 @@ function check(){if(busy||out.querySelector('[data-ft]'))return;
   }catch(e){try{console.error('free talk',e);}catch(x){}}
   setTimeout(function(){busy=false;},0);}
 QA.watch('free_talk',function(){check();});
-function social(q){return !!(TK()&&TK().social(q));}
+function social(q){if(!(TK()&&TK().social(q)))return false;try{if(W.QA.core2&&W.QA.core2.exact&&W.QA.core2.exact(q))return false;}catch(x){}return true;}
 if(QA.first)QA.first('chat_social',function(q,e){
   try{if(!social(q))return false;}catch(x){return false;}
   if(e.type==='keydown'){if(e.isComposing||e.keyCode===229)return false;e.preventDefault();}
@@ -10612,6 +10695,113 @@ function contractCard(name){var h=full('tell me about the '+name+' contract'),d=
   var c=[].filter.call(d.querySelectorAll('.qa-card'),function(el){var sb=el.querySelector('.qa-title .qa-sub');return N(ttl(el))===N(name)&&sb&&/contract/i.test(sb.textContent);})[0];
   if(!c&&W.__qaCxCard){var h2=null;try{h2=W.__qaCxCard('Contract',name);}catch(e){h2=null;}if(h2){d.innerHTML=h2;c=d.querySelector('.qa-card');}}
   return c?markName(c.outerHTML):null;}
+var EXQ=/^(?:(?:tell me (?:more )?about|info(?:rmation)? (?:on|about)|explain|describe|what is|what are|whats|what s|what does|what do|show me)\s+)?(?:the\s+|a\s+|an\s+)?(.+?)(?:\s+(skill|rune|contract))?(?:\s+(?:do|does|mean|means))?$/;
+var EXN=null;
+function exactNames(){if(EXN)return EXN;EXN={};
+  var add=function(n,k){var key=N(n);if(key.length<2)return;var e=EXN[key]=EXN[key]||{k:{}};if(!e.k[k])e.k[k]=n;};
+  try{JSON.parse(D.getElementById('qaKB').textContent).forEach(function(r){add(r[1],r[0]==='Skill'?'skill':r[0]==='Contract'?'contract':'other');});}catch(e){}
+  if(typeof RUNE_DETAILS!=='undefined')Object.keys(RUNE_DETAILS).forEach(function(n){add(n,'rune');});
+  if(typeof CONTRACT_DETAILS!=='undefined')Object.keys(CONTRACT_DETAILS).forEach(function(n){add(n,'contract');});
+  index().names.forEach(function(x){add(x.name,'other');});
+  return EXN;}
+var EXQ2=/^what (?:skills|runes|recipes|gear|equipment|items|parts|stuff) (?:does|do|can|will) (?:the\s+)?(.+?)(?:\s+(contract))?\s+(?:have|give|make|add|craft|unlock|contain)$/;
+function exactName(raw){
+  var m2=EXQ2.exec(N(raw));
+  if(m2){var e2=exactNames()[m2[1]];return e2&&e2.k.contract&&(m2[2]||!e2.k.other)?{kind:'contract',name:e2.k.contract}:null;}
+  var m=EXQ.exec(N(raw));if(!m)return null;
+  var e=exactNames()[m[1]];if(!e)return null;
+  var want=m[2]||'',ks=Object.keys(e.k).filter(function(x){return x!=='other';});
+  if(want){if(!e.k[want])return null;ks=[want];}else if(e.k.other||ks.length!==1)return null;
+  return {kind:ks[0],name:e.k[ks[0]]};}
+function exactCard(x){var h=null,S2=W.__qaStrat;
+  if(x.kind==='skill'){var f=S2&&S2.facts?S2.facts(x.name):null;h=f&&f.html;}
+  else if(x.kind==='rune'){var r=S2?S2.detect(x.name+' rune'):null;h=r&&r.kind==='rune'?r.html:null;}
+  else h=contractCard(x.name);
+  return h?markName(h):null;}
+var WHEREQ=/^(?:where (?:do|can|could|would|should) (?:i|you|we) (?:get|find|obtain|farm|buy|craft|learn)|where (?:to|can i) (?:get|find|obtain)|where (?:does|do|is|can) (?:the )?|how (?:do|can|could) (?:i|you) (?:get|obtain|unlock|find|learn|craft)|how to (?:get|obtain|unlock|find|learn|craft)|where does)\s+(?:the\s+|a\s+)?(.+?)(?:\s+skill)?(?:\s+(?:drop|drops|come from|from|obtained|found))?$/;
+function whereSkill(raw){
+  var m=WHEREQ.exec(N(raw));if(!m)return null;
+  var e=exactNames()[m[1]];if(!e||!e.k.skill)return null;
+  var nm=e.k.skill;if(typeof SKILL_DETAILS!=='undefined'&&SKILL_DETAILS[nm])return null;
+  if(e.k.other&&!/\bskill\b/.test(N(raw)))return null;
+  return nm;}
+function whereSkillCard(nm){
+  var low=nm.toLowerCase(),kbStar='',kb=[];
+  try{kb=JSON.parse(D.getElementById('qaKB').textContent);}catch(e){kb=[];}
+  kb.forEach(function(r){if(r[0]==='Skill'&&r[1]===nm){var st=/^\s*([1-7])★/.exec(String(r[2]));if(st)kbStar=st[1];}});
+  var alias={'entangling roots':'entagling roots','black sphere':'biack sphere','judgment':'judgement'};
+  var cts=[];if(typeof CONTRACT_DETAILS!=='undefined')Object.keys(CONTRACT_DETAILS).forEach(function(c){(CONTRACT_DETAILS[c].lines||[]).forEach(function(l){
+    var ln=String(l[2]||'').toLowerCase();if(l[1]==='Skill'&&(ln===low||alias[ln]===low))cts.push({c:c,cost:l[0],st:CONTRACT_DETAILS[c].stars});});});
+  cts.sort(function(a,b){return a.cost-b.cost||a.st-b.st||a.c.localeCompare(b.c);});
+  var re=new RegExp('(^|[,:]\\s*)'+nm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s*(?=,|;|$)','i'),who={Job:[],Race:[]};
+  kb.forEach(function(r){if(!who[r[0]])return;var sm=/Skills: ([^;]*)/.exec(String(r[2]));if(sm&&re.test(sm[1].trim()))who[r[0]].push(r[1]);});
+  if(!cts.length&&!who.Job.length&&!who.Race.length)return null;
+  var h=lead(E(nm)+(kbStar?' is a '+kbStar+'★ skill.':' is a skill.')+' No boss in the guide’s tables drops it'+(kbStar&&+kbStar<6?' (they hold only 6★ and 7★ skills)':'')+'. The guide has it here:');
+  if(cts.length){var ic=function(c){var d=CONTRACT_DETAILS[c];return d&&d.icon?'<img class="qa-chip-ic" src="'+d.icon+'" alt="">':'';};
+    h+=line('<span class="qa-lab">Contracts ('+cts.length+')</span> '+cts.map(function(x){return '<span class="qa-chip term-link ct-open" data-ct="'+E(x.c)+'" style="cursor:pointer">'+ic(x.c)+E(x.c)+'</span> '+x.st+'★ contract, '+x.cost+' Soulstones';}).join(' · '));
+    h+=line('A contract equipped at the start of a run adds its recipes: you craft the skill with Soulstones during the run.');}
+  var btn=function(n){return '<button type="button" class="qa-exbtn" data-ex="'+E('Tell me about '+n)+'">'+E(n)+'</button>';};
+  if(who.Job.length)h+=line('<span class="qa-lab">Jobs with it ('+who.Job.length+')</span>')+'<div class="qa-ex">'+who.Job.map(btn).join('')+'</div>';
+  if(who.Race.length)h+=line('<span class="qa-lab">Races with it ('+who.Race.length+')</span>')+'<div class="qa-ex">'+who.Race.map(btn).join('')+'</div>';
+  h+='<div class="qa-ex"><button type="button" class="qa-exbtn" data-ex="'+E('Tell me about '+nm)+'">What does '+E(nm)+' do?</button></div>';
+  return card(E(nm),'where to get · '+(kbStar?kbStar+'★ ':'')+'skill',h,'name');}
+var CMPQ1=/^(?:compare|(?:what (?:is|s) the |whats the )?differences? between|which is better)\s+(?:the\s+)?(.+?)\s+(?:and|vs|versus|with|or|to)\s+(?:the\s+)?(.+)$/,CMPQ2=/^(?:the\s+)?(.+?)\s+(?:vs|versus)\s+(?:the\s+)?(.+)$/;
+function pairName(s){s=String(s).replace(/\s+(skill|rune|contract|stat|status)$/,'');var e=exactNames()[s];if(!e)return null;
+  var ks=Object.keys(e.k).filter(function(x){return x!=='other';});
+  if(ks.length===1&&!e.k.other)return {kind:ks[0],name:e.k[ks[0]]};
+  var t=index().names.filter(function(x){return x.n===s&&(x.kind==='stat'||x.kind==='term'||x.kind==='status');})[0];
+  return t?{kind:'term',name:t.name}:null;}
+function cmpPair(raw){var t=N(raw),m=CMPQ1.exec(t)||CMPQ2.exec(t);if(!m)return null;
+  var a=pairName(m[1]),b=pairName(m[2]);if(!a||!b||a.name===b.name)return null;
+  var rc=function(x){return x.kind==='rune'||x.kind==='contract';};
+  return rc(a)||rc(b)||(a.kind==='term'&&b.kind==='term')?[a,b]:null;}
+function termFirst(name){var d=D.createElement('div');d.innerHTML=full('what is '+name);
+  var cs=[].slice.call(d.querySelectorAll(':scope > .qa-card'));var c=cs.filter(function(el){return N(ttl(el))===N(name);})[0]||cs[0];
+  return c?markName(c.outerHTML):null;}
+function pairCard(pr){var parts=pr.map(function(x){return x.kind==='term'?termFirst(x.name):exactCard(x);});
+  if(parts.some(function(h){return !h;}))return null;
+  var pl={rune:'runes',contract:'contracts',skill:'skills',term:'stats and terms'},same=pr[0].kind===pr[1].kind;
+  return card(E(pr[0].name)+' vs '+E(pr[1].name),'side by side',lead('The guide does not rank '+(same?pl[pr[0].kind]:'them')+'. Here is what it says about each one:'),'pair')+parts.join('');}
+var CTHOW=/^(?:how (?:do|does) (?:a |the )?contracts? work|how (?:do i|to|can i) use (?:a |the )?contracts?|explain (?:the )?contracts?|what do contracts do|how do i use contracts)$/;
+function contractsHowCard(){var n=typeof CONTRACT_DETAILS!=='undefined'?Object.keys(CONTRACT_DETAILS).length:0;
+  var h=line('A contract is a permanent item: it is never lost when you die in a dungeon run.')+
+    line('Equip a contract at the start of a run to add its crafting recipes. Up to 5 can be equipped. During the run you craft what they list (skills, equipment, equipment parts, runes, rerolls) with Soulstones.')+
+    (n?line('The guide has '+n+' contracts, from 1★ to 7★. Tap one in the list to see its recipes and costs.'):'')+
+    '<div class="qa-ex"><button type="button" class="qa-exbtn" data-ex="Show contracts">Browse contracts</button><button type="button" class="qa-exbtn" data-ex="Where do I get Thunderbolt?">Where do I get Thunderbolt?</button></div>';
+  return card('Contracts','how they work',h,'name');}
+var CHALQ=/^(?:challenge me|give me a challenge|another challenge|next challenge|quiz me|test me|challenge)$/;
+var STATN={int:'INTelligence',intelligence:'INTelligence',str:'STRength',strength:'STRength',dex:'DEXterity',dexterity:'DEXterity',pie:'PIEty',piety:'PIEty'},STATS4=['STRength','DEXterity','INTelligence','PIEty'];
+function statNums(t){var v={},m,re=/\b(\d{1,4})\s*(int|intelligence|str|strength|dex|dexterity|pie|piety)\b|\b(int|intelligence|str|strength|dex|dexterity|pie|piety)\s*(?:of\s+|is\s+|at\s+)?(\d{1,4})\b/g;
+  while((m=re.exec(t)))v[STATN[m[2]||m[3]]]=+(m[1]||m[4]);return v;}
+function skillIn(t){var pad=' '+t+' ',best=null,ix=exactNames();
+  Object.keys(ix).forEach(function(k){if(!ix[k].k.skill||k.length<3)return;if(pad.indexOf(' '+k+' ')>=0&&(!best||k.length>best.length))best=k;});
+  if(typeof SKILL_DETAILS!=='undefined')Object.keys(SKILL_DETAILS).forEach(function(n){var k=N(n);if(pad.indexOf(' '+k+' ')>=0&&(!best||k.length>best.length))best=k;});
+  return best;}
+function skillText(n){var kb=[];try{kb=JSON.parse(D.getElementById('qaKB').textContent);}catch(e){}
+  if(typeof SKILL_DETAILS!=='undefined'){var sd=Object.keys(SKILL_DETAILS).filter(function(x){return N(x)===n;})[0];if(sd)return {name:sd,t:plain(SKILL_DETAILS[sd].description)};}
+  var r=kb.filter(function(x){return x[0]==='Skill'&&N(x[1])===n;})[0];return r?{name:r[1],t:String(r[2])}:null;}
+function calcAsk(raw){var t=N(raw);if(!/\d/.test(t)||/\b(gear|items?|weapons?|armou?rs?|accessor(?:y|ies)|equipment|races?|jobs?|origins?|builds?|level|lv|stacks?)\b/.test(t))return null;var v=statNums(t);if(!Object.keys(v).length)return null;
+  var k=skillIn(t);return k?{key:k,v:v}:null;}
+function calcCard(c){var st=skillText(c.key);if(!st)return null;
+  var main=String(st.t).split(/ \/ [^\/]{2,40} \/ \[On Use\]/)[0].replace(/[ΙI](?=[a-z])/g,function(x,i,s){return 'I';}).replace(/EIement/g,'Element').replace(/INTe[Il]{1,2}igence|INTel[Il]igence/g,'INTelligence');
+  var m=/(?:\(x(\d+)\)\s*)?Direct attack your opponent\.?\s*(\d[\d,]*)%\s*of\s+(?:your\s+)?((?:(?:STRength|DEXterity|INTelligence|PIEty)\s*(?:\+|or)\s*)*(?:STRength|DEXterity|INTelligence|PIEty))/i.exec(main.replace(/\s+/g,' ').replace(/(STRength|DEXterity|INTelligence|PIEty)or /g,'$1 or '));
+  var h,ab=function(x){return {STRength:'STR',DEXterity:'DEX',INTelligence:'INT',PIEty:'PIE'}[x];};
+  if(!m){h=line(E(st.name)+'’s text has no direct attack based on STR, DEX, INT or PIE, so there is nothing to work out from those numbers.');
+    return card(E(st.name),'damage from your stats',h+line('<span class="qa-lab">Its text</span> '+E(main.slice(0,220))),'name');}
+  var pct=+m[2].replace(/,/g,''),hits=+(m[1]||1),parts=m[3].split(/\s*(\+|or)\s*/).filter(function(x){return x&&x!=='+'&&x!=='or';}),isOr=/\bor\b/.test(m[3]);
+  var miss=parts.filter(function(p){return !(p in c.v);});
+  var gv=function(p){return c.v[p]||0;},f=function(n){return (Math.round(n*100)/100).toLocaleString('en-US');};
+  h=line('<span class="qa-lab">Its attack</span> '+(hits>1?hits+' hits of ':'')+pct+'% of your '+parts.map(ab).join(isOr?' or ':' + '));
+  var given=Object.keys(c.v).filter(function(k){return STATS4.indexOf(k)>=0;}).map(function(k){return ab(k)+' '+c.v[k];}).join(', ');
+  if(isOr){var best=parts.reduce(function(a,p){return gv(p)>gv(a)?p:a;},parts[0]);
+    h+=line('<span class="qa-lab">With '+E(given)+'</span> it uses your highest, '+ab(best)+' '+gv(best)+': '+pct+'% × '+gv(best)+' = <b>'+f(pct*gv(best)/100)+'</b>'+(hits>1?' per hit, '+f(pct*gv(best)/100*hits)+' for '+hits+' hits':''));
+    h+=line('A skill that gives a choice (“'+parts.map(ab).join(' or ')+'”) always uses your highest of them; a skill with “+” adds them.');}
+  else{var sum=parts.reduce(function(a,p){return a+gv(p);},0);
+    h+=line('<span class="qa-lab">With '+E(given)+'</span> '+pct+'% × ('+parts.map(function(p){return gv(p);}).join(' + ')+') = <b>'+f(pct*sum/100)+'</b>'+(hits>1?' per hit, '+f(pct*sum/100*hits)+' for '+hits+' hits':''));}
+  if(miss.length)h+=line('Not given, counted as 0: '+miss.map(ab).join(', ')+'.');
+  h+=line('<i>Only the listed percent of your stats. Damage bonuses, the element, the target’s armor and resistances, crits and “power per” bonuses are not counted.</i>');
+  h+='<div class="qa-ex"><button type="button" class="qa-exbtn" data-ex="'+E('Tell me about '+st.name)+'">What does '+E(st.name)+' do?</button></div>';
+  return card(E(st.name),'damage from your stats · computed',h,'name');}
 var ABBR={wep:'weapon',weps:'weapons',wpn:'weapon',wpns:'weapons',acc:'accessory',accs:'accessories',accessorys:'accessories',accesory:'accessory',accesories:'accessories',accessorie:'accessory'};
 function shortForms(q){return String(q).replace(/\b([67]) ?\*/g,'$1 star').replace(/\b([67])-?(stars?)\b/gi,'$1 $2')
   .replace(/[a-z]+/gi,function(w){var r=ABBR[w.toLowerCase()];return r||w;});}
@@ -10632,6 +10822,7 @@ function kindEntries(){if(KE)return KE;KE=[];var ix=index(),seen={};
   Object.keys(ITEM_DETAILS).forEach(function(k){var m=/::(weapon|armor|accessory)$/.exec(k),nm=k.replace(/::(weapon|armor|accessory|skill)$/,''),d=ITEM_DETAILS[k];
     add(nm,m?m[1]:(d&&d.slot)||'item',nm,m?m[1]:'');});
   if(typeof SKILL_DETAILS!=='undefined')Object.keys(SKILL_DETAILS).forEach(function(k){add(k,'skill',k,'skill');});
+  try{JSON.parse(D.getElementById('qaKB').textContent).forEach(function(e){if(e[0]==='Skill')add(e[1],'skill','tell me about '+e[1]+' skill','skill');});}catch(e){}
   ix.places.forEach(function(p){add(p.name,p.type==='Special'?'place':p.type.toLowerCase(),'what does '+p.name+' drop');});
   Object.keys(STATS).forEach(function(k){add(k,'stat','what does '+k+' do');});
   Object.keys(TERMS).forEach(function(k){add(k,'term','what does '+k+' do');});
@@ -10719,10 +10910,24 @@ function plan(raw,prev,depth){
         var fh=W.__qaWords.followFor(raw);if(fh)return {u:understand(raw),own:function(){return fh;}};}}catch(e){}
     var cr=null;try{cr=correction(raw,prev);}catch(e){cr=null;}
     if(cr)return {u:understand(raw),own:function(){return corrCard(cr);}};
+    if(CHALQ.test(N(raw))&&W.ASK&&W.ASK.challenge){var chh=null;try{chh=W.ASK.challenge('next');}catch(e){chh=null;}if(chh)return {u:understand(raw),own:function(){return chh;}};}
+    var ca=null;try{ca=calcAsk(raw);}catch(e){ca=null;}
+    if(ca){var cah=null;try{cah=calcCard(ca);}catch(e){cah=null;}if(cah)return {u:understand(raw),own:function(){return cah;}};}
+    if(CTHOW.test(N(raw))){var cth=contractsHowCard();return {u:understand(raw),own:function(){return cth;}};}
+    var pr=null;try{pr=cmpPair(raw);}catch(e){pr=null;}
+    if(pr)return {u:understand(raw),aug:pr[0].kind==='term'&&pr[1].kind==='term'?1:0,own:function(){var ph=null;try{ph=pairCard(pr);}catch(e){ph=null;}return ph;}};
+    var ws=null;try{ws=whereSkill(raw);}catch(e){ws=null;}
+    if(ws){var wh=null;try{wh=whereSkillCard(ws);}catch(e){wh=null;}if(wh)return {u:understand(raw),exact:{kind:'skill',name:ws},own:function(){return wh;}};}
+    var ex=null;try{ex=exactName(raw);}catch(e){ex=null;}
+    if(ex){var crisis=false;try{var TT=W.ASK&&W.ASK.tools&&W.ASK.tools.talk;crisis=!!TT&&TT.actOf(TT.analyse(raw))==='crisis';}catch(e){crisis=false;}
+      return {u:understand(raw),exact:ex,own:function(){var eh=null;try{eh=exactCard(ex);if(eh&&crisis&&W.__qaTalk)eh=W.__qaTalk.reply(raw).html+eh;}catch(e){eh=null;}return eh;}};}
     var sf=shortForms(raw);
     if(sf!==raw){var p1=plan(sf,prev,0);if(!p1.rewrite){p1.rewrite=sf;p1.direct=0;}return p1;}var fq=null;try{fq=W.ASK&&W.ASK.memory?W.ASK.memory.resolve(raw,W.ASK.facts.get()):null;}catch(e){fq=null;}
     if(fq&&fq.better)fq={q:'compare '+fq.better[0]+' and '+fq.better[1],direct:1};if(fq&&fq.which)fq=null;
     if(fq&&fq.q&&fq.q!==raw){var p2=plan(fq.q,prev,1);p2.rewrite=fq.q;p2.direct=fq.direct;p2.follow=1;return p2;}}
+  if(depth){var ws1=null,ex1=null;try{ws1=whereSkill(raw);ex1=ws1?null:exactName(raw);}catch(e){ws1=null;ex1=null;}
+    if(ws1){var wh1=null;try{wh1=whereSkillCard(ws1);}catch(e){wh1=null;}if(wh1)return {u:understand(raw),exact:{kind:'skill',name:ws1},own:function(){return wh1;}};}
+    if(ex1)return {u:understand(raw),exact:ex1,own:function(){var eh=null;try{eh=exactCard(ex1);}catch(e){eh=null;}return eh;}};}
   var u=understand(raw),it=u.kinds('item'),pl=u.kinds('place'),t=u.t;
   var cs=contractSubject(u);if(cs)return {u:u,aug:1,name:cs,own:function(){return contractCard(cs.name);}};
   var gearish=it.filter(function(x){return x.ref&&(x.ref.slot||detail(x.name));});
@@ -10733,7 +10938,8 @@ function plan(raw,prev,depth){
   if(bl!==null)return {u:u,aug:1,own:function(){return bl||null;}};
   if(it.length===1&&!u.pct&&/\bhow (many|much) (runs?|tries|times|kills|clears|attempts)\b|\bhow long (to|until|till|will it take)\b/.test(t))return {u:u,aug:1,own:function(){return runsItemCard(u,it[0].ref);}};
   if(/\b(farm|farming|grind|grinding)\b/.test(t)&&!u.names.length&&!u.stat&&!u.goal&&!u.stars.length&&!u.slots.length&&/\b(what|where|which|should)\b/.test(t))return {u:u,aug:1,own:farmAsk};
-  if(!it.length&&!pl.length&&!/\b(jobs?|races?|origins?|class|classes|skills?|contracts?|runes?)\b/.test(t)&&/\b(strongest|most powerful|best overall|overpowered|highest damage)\b/.test(t))return {u:u,aug:1,own:function(){return strongCard(u);}};
+  var bestAlone=/^(?:what s |whats |what is |which is |which )?(?:the )?best (?:7 star |6 star )?(?:weapons?|armou?rs?|accessor(?:y|ies)|gear|items?|equipment)(?: in the game)?$/.test(t)&&!u.goal&&!u.stat;
+  if(!it.length&&!pl.length&&!/\b(jobs?|races?|origins?|class|classes|skills?|contracts?|runes?)\b/.test(t)&&(bestAlone||/\b(strongest|most powerful|best overall|overpowered|highest damage)\b/.test(t)))return {u:u,aug:1,own:function(){return strongCard(u);}};
   if(gearish.length>=2&&u.cmp&&!/\bcompare\b/.test(t))return {u:u,aug:1,own:function(){return cmpCard(u,gearish);}};
   if(gearish.length===1&&it.length===1&&/^(is|are)\b/.test(t)&&/\b(good|worth|strong|useful|decent|bad|op|any good)\b/.test(t))return {u:u,aug:1,own:function(){return goodCard(u,gearish[0].ref.slot?gearish[0].ref:{name:gearish[0].name,slot:'',stars:{},at:[]});}};
   if(/\b(max|maximum|cap|capped|limit|at most|upper limit|highest)\b/.test(t)&&!/\b(gear|items?|equipment|where|get|drops?|which)\b/.test(t)&&(/\bhp stacks?\b/.test(t)||u.names.some(function(x){return x.kind==='stat'||x.kind==='term';}))&&!it.length)return {u:u,aug:1,own:function(q){u.q=q;return maxCard(u);}};
@@ -10755,13 +10961,13 @@ QA.pre.add('core2',1000,function(next){return function(raw){
   var q=(p.rewrite&&p.direct)?p.rewrite:next(p.rewrite||raw);
   try{p=withRules(p,q);}catch(e){}
   if(real&&p.rewrite)S.rw={raw:raw,q:q,at:Date.now()};
-  if(real){S.cur={raw:raw,q:q,plan:p};S.curQ={raw:raw,q:q,u:understand(q)};
+  if(real){S.cur={raw:raw,q:q,plan:p};var mq=p.exact?'tell me about '+p.exact.name:q;S.curQ={raw:raw,q:mq,u:understand(mq)};
     if(p.own&&p.aug)S.pend={raw:raw,q:q,plan:p,at:Date.now()};}
   return q;};});
 var prevMulti=W.__qaMulti;
 W.__qaMulti=function(q,a){
   var c=S.cur;
-  if(c&&c.q===q&&c.plan&&c.plan.own&&!c.plan.aug){S.cur=null;var h=null;try{h=c.plan.own(q);}catch(e){h=null;}if(h){S.shown={raw:c.raw,fixed:c.plan.u?c.plan.u.fixed:c.raw,at:Date.now()};return h;}}
+  if(c&&c.q===q&&c.plan&&c.plan.own&&!c.plan.aug){S.cur=null;var h=null;try{h=c.plan.own(q);}catch(e){h=null;}if(h){S.shown={raw:c.raw,fixed:c.plan.u?c.plan.u.fixed:c.raw,at:Date.now(),exact:!!c.plan.exact&&!c.plan.taught};return h;}}
   return prevMulti?prevMulti(q,a):null;};
 if(QA.first)QA.first('core2',function(raw,e){
   var p;try{p=plan(raw,S.last);}catch(x){return false;}
@@ -10775,7 +10981,7 @@ if(QA.first)QA.first('core2',function(raw,e){
 QA.shape.add('core2_note',1000,function(next){return function(el){var r=next.apply(this,arguments);
   try{var sh=S.shown;S.shown=null;if(sh&&el&&el.querySelector('[data-core2]')){var n=el.firstElementChild;
     if(n&&n.classList.contains('qa-note')&&/^Understood as:/.test(n.textContent)){
-      if(sh.fixed&&sh.fixed!==sh.raw)n.innerHTML='Understood as: <b>'+E(sh.fixed)+'</b>';else n.parentNode.removeChild(n);}}}catch(e){}
+      if(sh.fixed&&sh.fixed!==sh.raw&&!sh.exact)n.innerHTML='Understood as: <b>'+E(sh.fixed)+'</b>';else n.parentNode.removeChild(n);}}}catch(e){}
   return r;};});
 var FAILV=/I couldn.t match|could not pin down|could not match it to an entry|cannot find this in the guide|outside this guide|outside what I know|not in this guide|does not cover this/i;
 function tnorm(el){var t=el&&el.querySelector('.qa-title');return t?t.textContent.replace(/\s+/g,' ').trim().toLowerCase():'';}
@@ -10808,7 +11014,8 @@ function addOn(){var p=S.pend;if(!p)return;S.pend=null;
   [].slice.call(box.querySelectorAll(':scope > [data-mech]')).forEach(function(c){if(c.hasAttribute('data-mech-top'))return;
     var oc=old.filter(function(o){return o.classList&&o.classList.contains('qa-card');})[0],ss=function(x){return ' '+N(x).replace(/s\b/g,'')+' ';};
     var ot=oc?N(ttl(oc)):'',named=ot.length>2&&(ss(p.q||p.raw).indexOf(ss(ot))>=0||ss(p.raw).indexOf(ss(ot))>=0);
-    if(named||box.querySelectorAll(':scope > .qa-card:not([data-mech])').length)out.appendChild(c);});
+    var howI=/^(how (?:do|can|should|could) i|how to|what (?:can|should) i)\b/.test(N(p.raw));
+    if(named||howI||box.querySelectorAll(':scope > .qa-card:not([data-mech])').length)out.appendChild(c);});
   if(!box.firstChild)return;
   [].slice.call(box.querySelectorAll(':scope > .qa-card')).forEach(function(c){var sb=c.querySelector('.qa-sub');if(sb&&/\(end\)$/.test(sb.textContent)){sb.textContent=sb.textContent.replace(/ ?\(end\)$/,'');out.appendChild(c);}});
   if(!box.firstChild)return;
@@ -10840,7 +11047,7 @@ out&&out.addEventListener('click',function(ev){var bt=ev.target.closest&&ev.targ
   var ta=row.nextElementSibling&&row.nextElementSibling.querySelector('textarea');if(ta){try{ta.focus();ta.select();}catch(e){}
     try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(ta.value).then(function(){bt.textContent='Copied';},function(){});}catch(e){}}},true);
 QA.understand=understand;
-QA.core2={remember:function(raw,item,q){ S.curQ={raw:raw,q:q||raw,u:understand(q||raw)};if(item&&QA.state)QA.state.item=item;},fixes:{list:fixes,clear:function(){try{LS().clear();}catch(e){}}},plan:function(q){var p=plan(q,S.last);return {rewrite:p.rewrite||null,own:!!p.own,u:p.u};},last:function(){return S.last;},
+QA.core2={exact:function(q){try{return exactName(q);}catch(e){return null;}},nameOnly:function(q){try{var m=EXQ.exec(N(q));return !!(m&&exactNames()[m[1]]);}catch(e){return false;}},remember:function(raw,item,q){ S.curQ={raw:raw,q:q||raw,u:understand(q||raw)};if(item&&QA.state)QA.state.item=item;},fixes:{list:fixes,clear:function(){try{LS().clear();}catch(e){}}},plan:function(q){var p=plan(q,S.last);return {rewrite:p.rewrite||null,own:!!p.own,u:p.u};},last:function(){return S.last;},
   html:function(q){var p=plan(q,S.last);if(!p.own)return null;try{return p.own(W.__qaPre?W.__qaPre(q):q);}catch(e){return 'ERROR '+e;}}};
 })();</script>
 <script>(function(){'use strict';var D=document;
@@ -12015,7 +12222,9 @@ W.__qaSay={card:function(c){ return sayFor(c);},line:function(kind,name){var c=D
       if (k && e.form.length >= 3 && pad.indexOf(' ' + e.form + ' ') >= 0) { roster = {name: k.name, kind: 'roster'}; return true; }
       return false;
     });
-    return {one: its[0] || pls[0] || roster || sts[0] || null, pair: its.length >= 2 ? [its[0].name, its[1].name] : pls.length >= 2 ? [pls[0].name, pls[1].name] : null,
+    var cds = [];
+    (R.names || []).forEach(function (e) { (e.names || []).some(function (x) { if (x.kind === 'codex skill' || x.kind === 'contract') { cds.push({name: x.name, kind: x.kind}); return true; } return false; }); });
+    return {one: its[0] || pls[0] || roster || cds[0] || sts[0] || null, pair: its.length >= 2 ? [its[0].name, its[1].name] : pls.length >= 2 ? [pls[0].name, pls[1].name] : null,
       pairItems: its.length >= 2, place: pls[0] || null, build: !!L.build};
   }
   M.remember = function (c) { M.last = c; };
@@ -12028,6 +12237,8 @@ W.__qaSay={card:function(c){ return sayFor(c);},line:function(kind,name){var c=D
     if ((CMPW.test(t) || BETTERW.test(t)) && S0.pair) return {q: 'compare ' + S0.pair[0] + ' and ' + S0.pair[1], direct: 1};
     var pl1 = own.filter(function (x) { return x.kind === 'place'; });
     if (/\belse\b/.test(t) && own.length === 1 && pl1.length === 1 && S0.one && S0.one.kind === 'item' && (L.places || []).indexOf(pl1[0].name) >= 0) return {q: raw, direct: 1, except: [S0.one.name]};
+    if (own.length === 1 && S0.one && own[0].name !== S0.one.name && /\b(it|that one|this one)\b/i.test(raw) && /\b(compare|vs|versus|against|differ\w*|better|or)\b/.test(t))
+      return {q: raw.replace(/\b(it|that one|this one)\b/i, S0.one.name), direct: 1};
     if (own.length || R.stat) return null;
     if (MOREW.test(t)) {
       if (!S0.one || (S0.build && /^(why|why is that|how come|explain)$/.test(t))) return null;
@@ -12188,6 +12399,10 @@ W.__qaSay={card:function(c){ return sayFor(c);},line:function(kind,name){var c=D
   var RULEQ = /^(what is|what are|whats|what s|how does|how do|how is|how are|explain|define|what does)\b|\b(work|works|calculated|formula|chosen|decided|determined|rolled)\b/;
   var LISTQ = /\b(which|where|best|gear|items?|equipment|weapons?|accessor(?:y|ies)|drops?|farm|farming|build)\b/;
   var STATW = /\b(stats|stat|hp|health|shield|stacks|start|starting|base|total|combine|combo|lv|level|begin|would have|simulate)\b/;
+  function isChip(text, F) {
+    var t = ASK.reader.clean(text);
+    return ((F && F.rules && F.rules.topics) || []).some(function (tp) { return (tp.chips || []).some(function (x) { return ASK.reader.clean(x[1]) === t; }); });
+  }
   function rules(text, F, o) {
     var R = ASK.reader.read(text, F, o || {}), t = R.t, pad = ' ' + t + ' ', ents = [], roster = false, used = [];
     ASK.reader.index(F).long.forEach(function (e) {
@@ -12198,10 +12413,11 @@ W.__qaSay={card:function(c){ return sayFor(c);},line:function(kind,name){var c=D
       used.push([at, at + e.form.length + 1]); ents.push({at: at, name: k.name}); if (/^(race|job|origin)$/.test(k.kind)) roster = true;
     });
     ents.sort(function (a, b) { return a.at - b.at; });
-    var c = roster && STATW.test(t) ? {intent: 'simulate', conf: 0.9} : RULEQ.test(t) && !LISTQ.test(t) ? {intent: 'mechanic', conf: 0.9} : {intent: 'other', conf: 0};
+    var chip = isChip(text, F);
+    var c = roster && STATW.test(t) ? {intent: 'simulate', conf: 0.9} : (RULEQ.test(t) && !LISTQ.test(t)) || chip ? {intent: 'mechanic', conf: 0.9} : {intent: 'other', conf: 0};
     return {c: c, ents: ents.map(function (x) { return x.name; })};
   }
-  ASK.router = {route: route, answer: answer, list: list, listRoute: listRoute, rules: rules, RULES: RULES};
+  ASK.router = {route: route, answer: answer, list: list, listRoute: listRoute, rules: rules, isChip: isChip, RULES: RULES};
 })(typeof window !== 'undefined' ? (window.ASK = window.ASK || {}) : module.exports);</script>
 <script>(function (ASK) {
   'use strict';
@@ -13168,21 +13384,24 @@ var HIDW=new RegExp('^how\\s+(?:do|does|is|are)\\s+'+HID_T+'\\s+(?:work|works|us
 <script>(function (ASK) {
   'use strict';
 var B=[
-{t:'Turn order',q:'My damage hits the cap, yet some fights still go badly. What should I check first?',k:'Who acts first, and what can the enemy do before your first turn?',a:'Turn order is not speed. The enemy opens only 1 fight in 3, then the sides alternate. The real danger is that single opening enemy turn, so make sure your shield and HP stacks survive any one enemy turn.',r:['V:The enemy opens only about 1 fight in 3.','V:After that the sides alternate.','V:Damage hits the shield first, then HP.'],x:['who goes first in a fight']},
-{t:'Armor',q:'Poison ticks keep wearing me down. What kind of defense should I look at?',k:'Is there more than one kind of armor that applies to a tick?',a:'Poison damage can be cut by two things that multiply: normal armor of its damage type and a matching poison source armor. Stacking only one leaves the other lever unused.',r:['V:Damage-over-time can also be cut by a matching source armor, limited to 75.','V:Source armor multiplies with normal armor.'],x:['100 poison damage against 40% poison armor']},
-{t:'Parry',q:'Is investing in parry worth it for a tank build?',k:'What kinds of attacks can and cannot be parried?',a:'Parry is capped at 95 and only works on direct attacks, so many status effects still land. It is strong against direct hitters and weak against status-heavy bosses (estimate).',r:['V:Parry chance is limited to 0..95.','V:Only direct attacks can be parried; against status effects only debuffs, never buffs.','V:Several effects cannot be parried at all.'],x:['parry 40 attacker +20%']},
-{t:'HP stacks',q:'How can I survive a hit that should kill me?',k:'What happens at 0 HP if you still have HP stacks?',a:'HP stacks work like extra lives: at 0 HP a stack is spent and HP refills, and Guts gives a chance to keep the stack. Guts gear gives 15 to 30. The exact timing is an estimate (probably at that unit\'s own next turn start).',r:['V:Alive while HP is above 0 or at least 1 HP stack remains.','V:Spending a stack refills HP; a Guts roll keeps the stack.','H:The stack is spent at that unit\'s own next turn start and at battle end.'],x:['I have 3 hp stacks and lose 1 with guts 30']},
-{t:'Ailments',q:'My debuffs keep failing on bosses. How do I make them reliable?',k:'Which numbers push the chance up, and where does it stop?',a:'Ailment chance = skill value + your Effective - target Resist, then modifiers. Raising Effective or lowering their Resist both help, but it can never go above 95.',r:['V:Ailment hit chance = skill value + your Effective - target Resist Ailment, then modifiers.','V:The result is limited to 5..95.'],x:['ailment chance skill 80 effective 20 resist 30']},
-{t:'Crit',q:'Should I build for crits or for armor penetration?',k:'What does a crit already do to armor?',a:'A crit multiplies damage by 1.5 and ignores positive armor, so crits already beat armor. Penetration helps your non-crit hits, so it is the better extra once your crit chance is already high (estimate).',r:['V:Crit chance is limited to 5..95; a crit multiplies damage by 1.5.','V:A crit ignores positive armor.','V:Penetrate runes ignore armor of their type.'],x:['100 damage against 50% armor']},
-{t:'Shield vs HP',q:'Enemies strip my shield first. Is shield or HP the better thing to stack?',k:'Do the two behave differently when you take a normal hit?',a:'Damage hits the shield first, then HP, so for ordinary hits they act as one pool. Both follow the same 0.85 rule with percent bonuses on top, so compare the percent bonuses you can actually get.',r:['V:Damage hits the shield first, then HP.','V:Max HP and max shield = round(round(raw x 0.85) x (1 + extra%/100)).'],x:['How is max HP calculated if raw base HP is 100 and I have +25% max HP?']},
-{t:'Loot',q:'Should I push my risk level before picking skills and gear?',k:'What do you unlock at high risk, and what might it cost?',a:'Rarity 6 and 7 picks need Savage mode (Risk 100 or more); below that the top rarity is 5. So pushing risk is the only way to see 6 and 7 star choices. The cost in harder fights is my estimate, not a checked rule.',r:['V:The rarity upper limit is 5, or 7 in Savage mode (Risk 100 or more).','V:Rarity 6 and 7 need Savage mode (Risk 100 or more).'],x:[]},
-{t:'Loot',q:'My skill picks keep offering low rarity. What can raise the odds?',k:'Where does extra reroll power come from, and can buying it backfire?',a:'Reroll power gives extra tries for +1 star. It comes from the enhanced-reroll state, three origins, or a shop reroll contract. A contract overwrites the old value, so only buy one that is higher than what you already have.',r:['V:Reroll power N gives N extra tries for +1 star.','V:Buying a shop reroll contract (levels 1 / 3 / 5 / 7) overwrites the current value.'],x:[]},
-{t:'Enemy AI',q:'How should I plan around an enemy whose skills seem random?',k:'Is there a pattern to find, or only a worst case to survive?',a:'It is random: without priority runes it picks uniformly among its usable skills. Plan for its worst usable skill every turn rather than a pattern. Skills on cooldown or out of uses leave the pool.',r:['V:The enemy picks among its usable skills.','H:With no priority runes it picks uniformly at random.'],x:[]},
-{t:'Quick actions',q:'Is building around quick (extra) actions worth it?',k:'What blocks a quick action, and what is still unproven?',a:'Free skills are never quick and a no-quick flag blocks it. Whether a quick action really gives a second turn in a row is only an estimate, so test it in a safe fight before betting a build on it.',r:['V:Free skills are never quick; a no-quick flag blocks it.','H:A quick action probably lets the same side act again.'],x:[]},
-{t:'Damage',q:'My damage is capped. Where can I still improve?',k:'What is capped, and what is not?',a:'One hit is capped at 9,999,999, so extra power only helps by adding hits, ailment damage or surviving longer. Damage-over-time, reflect and pursuit damage have their own bonuses and scale separately from direct hits.',r:['V:One hit is capped at 9,999,999.','V:Damage-over-time, delayed, reflect and pursuit damage each get their own bonus.'],x:[]},
-{t:'Damage',q:'Do two damage bonuses add together or multiply?',k:'Does it matter whether they sit in the same step of the chain?',a:'In the damage chain each step multiplies the next (value x (100+n)/100), so +50% and +50% in two different steps make +125%, not +100%.',r:['V:Each modifier step of the damage chain multiplies the previous result.'],x:[]},
-{t:'Drops',q:'A boss item never drops. What can I change?',k:'Is the chance fixed, and is there any way to shift it?',a:'Each enemy drop names one exact item with a fixed chance, and an enemy gives only one reward. The Capture state may raise its capture item from 1% to 10% (estimate); main drops stay the same. More kills is the only sure lever.',r:['V:The chance per kill is the drop chance x rate/100, where the base rate is 100.','H:Capture on the enemy at the win raises its capture item from 1% to 10%.'],x:['What is the enemy drop chance if it is 100 out of 10,000?']},
-{t:'Death',q:'Can I lose a fight even with HP left?',k:'Is HP the only thing that decides it?',a:'Yes. A unit is also dead when the total remaining uses of all its non-free skills is below 1, whatever its HP. Running out of skill uses is a real way to lose.',r:['V:A unit is dead when the total remaining uses of all non-free skills is below 1.'],x:[]}
+{t:'Turn order',q:'Your plan only works if you move first. Does speed decide who moves first?',k:'Who opens a fight, and what happens after the first move?',a:'No. Speed does not decide it. You move first in about 2 fights out of 3; the enemy opens about 1 fight in 3. After the first move the two sides simply take turns. So make sure you can survive one enemy turn before you act.',r:['V:The enemy opens about 1 fight in 3. Speed does not change this.','V:After the first move, the two sides take turns.','V:Damage hits your shield first, then your HP.'],x:['who goes first in a fight']},
+{t:'Armor',q:'Poison hurts you a little every turn. Which armor cuts it?',k:'Is there more than one armor that cuts a Poison tick?',a:'Two armors cut it, and they multiply: your normal armor, and a separate armor that only works on Poison damage. Each one stops at 75%. If you only raise one of them, the other one stays unused.',r:['V:Damage over time (Poison, Burn, Bleed ...) can also be cut by its own separate armor, up to 75%.','V:That armor multiplies with your normal armor.'],x:['100 poison damage against 40% poison armor']},
+{t:'Parry',q:'Is it worth building a tank around Parry?',k:'Which attacks can be parried, and which cannot?',a:'Parry stops at 95%. It only blocks direct attacks. Of status effects it only blocks the bad ones (debuffs), and some can never be parried. So Parry is great against a boss that hits you directly, and weak against a boss that mostly uses status effects (best guess).',r:['V:Parry chance is limited to 0..95%.','V:Only direct attacks can be parried; of status effects only debuffs, never buffs.','V:Some effects cannot be parried at all (for example Stone Bind, Slow, Entangle Root, Storm Bind).'],x:['parry 40 attacker +20%']},
+{t:'HP stacks',q:'How can you survive a hit that should kill you?',k:'What happens at 0 HP if you still have HP stacks?',a:'HP stacks are extra lives. When your HP drops to 0, one stack is used and your HP fills back to full. Guts is a chance to keep that stack anyway (Guts gear gives 15 to 30, and Guts never goes above 95%). Exactly when the stack is used is not certain.',r:['V:You stay alive while your HP is above 0 or you have at least 1 HP stack.','V:Using a stack fills your HP to full; a Guts roll keeps the stack.','V:Guts is limited to 0..95%, so a stack is never 100% safe.','H:Exactly when the stack is used (probably at the start of your own next turn) is not certain.'],x:['I have 3 hp stacks and lose 1 with guts 30']},
+{t:'Ailments',q:'Your status effects (like Poison or Stun) keep failing on bosses. How do you make them land?',k:'Which numbers raise the chance, and where does it stop?',a:'Chance = the skill\'s value + your Effective - the boss\'s Resist: Ailments. Raising your Effective or lowering the boss\'s Resist both help, point for point. It never goes above 95% or below 5%.',r:['V:Ailment chance = skill value + your Effective - the target\'s Resist: Ailments, then bonuses.','V:The result is limited to 5..95%.'],x:['ailment chance skill 80 effective 20 resist 30']},
+{t:'Crit',q:'Should you build for crits or for armor piercing?',k:'What does a crit already do to the target\'s armor?',a:'A crit does 1.5 times the damage and ignores the target\'s armor, so your crits already go through armor. Armor piercing only helps your normal (non-crit) hits. That makes piercing the better pick when your crit chance is low, and more crit the better pick when it is already high.',r:['V:Crit chance is limited to 5..95%; a crit does 1.5 times the damage.','V:A crit ignores the target\'s armor (when the armor is above 0).','V:Penetrate runes ignore armor of their damage type.'],x:['100 damage against 50% armor']},
+{t:'Shield vs HP',q:'Enemies hit your shield first. Is shield or HP better to stack?',k:'Do they act differently when you take a normal hit?',a:'In one fight they work as one pool: a hit takes your shield first, then your HP. Both are counted the same way: the raw number is cut to 85%, then your percent bonuses are added. One difference: your shield fills back up every time you move to a new room.',r:['V:Damage hits your shield first, then your HP.','V:Max HP and max shield = the raw value x 0.85, then the percent bonuses (rounded).','V:Your shield is fully restored each time you move between rooms.'],x:['How is max HP calculated if raw base HP is 100 and I have +25% max HP?']},
+{t:'Loot',q:'Should you raise your Risk before you pick skills and gear?',k:'What does a high Risk unlock?',a:'6★ and 7★ picks only show up in Savage mode (Risk 100 or more). Below that, the best you can get is 5★. So raising Risk is the only way to see 6★ and 7★ choices. That fights get harder at high Risk is my guess, not a checked rule.',r:['V:Picks go up to 5★, or up to 7★ in Savage mode (Risk 100 or more).','V:6★ and 7★ picks need Savage mode.'],x:[]},
+{t:'Loot',q:'Your skill picks keep showing low stars. What raises the odds?',k:'Where does reroll power come from, and can buying it ever hurt?',a:'Reroll power gives extra tries at +1 star (power 3 = 3 extra tries). It comes from a rare gear effect, three origins, or a reroll contract bought in the shop (levels 1, 3, 5, 7). Careful: buying one REPLACES your current power, it does not add to it. Only buy a level higher than what you have.',r:['V:Reroll power N gives N extra tries for +1 star.','V:A shop reroll contract (level 1 / 3 / 5 / 7) replaces your current reroll power.'],x:[]},
+{t:'Enemy AI',q:'An enemy\'s skills seem random. How do you plan for it?',k:'Is there a pattern to learn, or only a worst case to survive?',a:'It picks from the skills it can use right now (not on cooldown, with uses left). Some runes make it prefer or avoid certain skills; without them it is probably a fair random pick (not certain). So plan for its worst usable skill every turn, not for a pattern.',r:['V:The enemy picks among the skills it can use right now (not on cooldown, uses left).','H:With no priority runes it probably picks evenly at random.'],x:[]},
+{t:'Quick actions',q:'Is a build around extra actions (Quick) worth it?',k:'What stops an extra action, and what is still unknown?',a:'A quick action gives you an extra action ("+1 Action!"). Free skills are never quick, and a No-Quick state blocks it. That the extra action always comes before the enemy moves is likely but not certain, so test it in an easy fight before you build around it.',r:['V:Free skills are never quick; a No-Quick state blocks quick actions.','V:Quick comes from the skill itself, from effects that force it, or as a chance from "add action" effects.','H:A quick action probably lets you act again before the enemy.'],x:[]},
+{t:'Damage',q:'Your hits reach the damage cap. How can you still get stronger?',k:'What is capped, and what is not?',a:'One hit can never go above 9,999,999, so more power on that hit is wasted. Grow in other ways: more hits, damage over time (Poison, Burn, Bleed ...), reflect damage, or surviving longer. Each of those has its own bonuses.',r:['V:One hit is capped at 9,999,999.','V:Damage over time, delayed, reflect and pursuit damage each get their own bonus.'],x:[]},
+{t:'Damage',q:'You have two +50% damage bonuses. Do they make +100%?',k:'Is each bonus applied to the base damage, or to the result of the one before?',a:'No, more. Bonuses from different kinds of effect multiply: 1.5 x 1.5 = 2.25, so +125%, not +100%.',r:['V:Each kind of damage bonus multiplies the result of the one before.'],x:[]},
+{t:'Drops',q:'A boss item never drops. What can you change?',k:'Is the chance fixed, and can anything shift it?',a:'Each kill is one roll with a fixed chance, and one enemy gives only one reward. Capture on the enemy may raise the chance of its capture item from 1% to 10% (not certain). Apart from that, more kills is the only sure way.',r:['V:Each drop has a fixed chance per kill (written out of 10,000: 100 = 1%).','V:One enemy gives only one reward.','H:Capture on the enemy when you win probably raises its capture item from 1% to 10%.'],x:['What is the enemy drop chance if it is 100 out of 10,000?']},
+{t:'Death',q:'Can you lose a fight while you still have HP?',k:'Is HP the only thing that matters?',a:'Yes, you can. You also lose when none of your skills (not counting free skills) has any uses left, whatever your HP. Watch your skill uses in long fights.',r:['V:A fighter loses when the remaining uses of all its non-free skills add up to less than 1, whatever its HP.'],x:[]}
+,
+{t:'Skill damage',q:'How much does a skill hit for before any bonuses?',k:'Read the skill: which stats does it name, and are they added (+) or a choice (or)?',a:'A skill hits for its percent of the stats it names: "+" adds them, "or" uses your highest one.',r:['V:Base damage = your stat x the skill\'s percent. A skill that names several stats with "+" adds them; one that gives a choice ("or") uses your highest one.','V:Damage bonuses, the element, the target\'s armor and resistances and crits all come after this base number.'],x:[]},
+{t:'Skill damage',q:'Which skill or stat gives the bigger hit?',k:'Work out each base hit first: percent x the stats the skill names.',a:'Compare the base hits: percent x the named stats ("+" adds them, "or" takes your highest).',r:['V:Base damage = your stat x the skill\'s percent. A skill that names several stats with "+" adds them; one that gives a choice ("or") uses your highest one.','V:Damage bonuses, the element, the target\'s armor and resistances and crits all come after this base number.'],x:[]}
 ];
 var BUILD={0:'best gear for max hp',1:'best gear for poison resistance',2:'best gear for parry',3:'best build for hp stacks',5:'best gear for crit',6:'best gear for max shield',7:'best gear for drop rate',8:'best gear for rarity reroll',10:'best gear for extra actions',11:'best gear for damage over time',13:'best gear for drop rate'};
 var XTRA={9:['enemy has 4 usable skills, chance to use a given skill in 3 turns'],11:['I hit for 12,000,000 damage in one hit'],12:['two damage bonuses +50% and +50%']};
@@ -13195,84 +13414,116 @@ function pk(a){return a[Math.floor(Math.random()*a.length)];}
 function sg(n){return (n<0?'-':'+')+Math.abs(n);}
 var G={
 0:function(){var n=ri(2,12),p=(1-Math.pow(2/3,n))*100;
- return {q:'You are about to fight '+n+' bosses in a row and your plan only works if you move first. How worried should you be?',
-  a:'The enemy opens a fight only 1 time in 3 (33.33%), and speed does not change that. Across '+n+' fights the chance that it opens at least once is '+f(p)+'%. After the opening the sides alternate, so make sure your shield and HP stacks survive any single enemy turn.',
+ return {q:'You will fight '+n+' bosses in a row and your plan only works if you move first. How likely is it that at least one of them moves first?',
+  a:'Each boss opens a fight about 1 time in 3 (33.33%), and speed does not change that. Over '+n+' fights, the chance that at least one boss moves first is '+f(p)+'%. After the first move the two sides take turns, so plan to survive one enemy turn at the start of a fight.',
   v:[n],chk:f(p)+'%'};},
 1:function(){var ail=pk(['Poison','Burn','Bleed']),d=ri(20000,400000,10000),a=ri(10,60,5),s=ri(0,50,5);
  var ar=function(x,y){return cl(rh(d*(1-Math.min(75,x)/100)*(1-Math.min(75,y)/100)),0,CAP);};
  var now=ar(a,s),na=ar(a+10,s),ns=ar(a,s+10);
- return {q:'A '+ail+' tick hits you for '+N(d)+' before armor. You have '+a+'% normal armor and '+s+'% '+ail+' source armor, and you can raise only ONE of them by 10 points. Which one?',
-  a:'Right now a tick does '+N(now)+'. With +10 normal armor it does '+N(na)+'; with +10 '+ail+' source armor it does '+N(ns)+'. '+(na<ns?'Raising your normal armor is the better lever here.':ns<na?'Raising your '+ail+' source armor is the better lever here.':'Both levers give the same result.')+' The two multiply with each other and each stops at 75.',
-  v:[d,a,s,0],chk:N(now)};},
+ return {q:'A '+ail+' tick hits you for '+N(d)+' before armor. You have '+a+'% normal armor and '+s+'% '+ail+' armor (a separate armor that only cuts '+ail+' damage). You can add +10 to only ONE of them. Which one?',
+  a:(na<ns?'Raise your normal armor.':ns<na?'Raise your '+ail+' armor.':'Both give the same.')+' Now a tick does '+N(now)+'. With +10 normal armor: '+N(na)+'. With +10 '+ail+' armor: '+N(ns)+'. The two armors multiply, so +10 on the armor that is already higher saves more (each stops at 75%).',
+  k:'Is there more than one armor that cuts a '+ail+' tick?',v:[d,a,s,0],chk:N(now)};},
 2:function(){var p=ri(20,80,5),t=ri(-20,30,10),a=ri(-10,40,10),st=Math.random()<0.5;
  var x=rh(rh(p*(100+t)/100)*(100+a)/100),c=cl(x,0,95);
- return {q:'Your Parry stat is '+p+'. Your own effects change it by '+sg(t)+'% and the attacker\'s effects change it by '+sg(a)+'%. Is it worth building a tank around parry against a boss that mostly '+(st?'inflicts status effects':'hits with direct attacks')+'?',
-  a:'Your parry chance works out to '+c+'%'+(x>95?' (the raw '+x+'% is cut down to the limit of 95)':'')+'. '+(st?'Only direct attacks can be parried, and against status effects only debuffs can be negated, never buffs, so many of its statuses will still land (estimate: weak against status-heavy bosses).':'Direct attacks are exactly what parry works on, so about '+c+' of every 100 of its direct hits would be negated (estimate: strong against direct hitters).'),
+ return {q:'Your Parry stat is '+p+'. Your own effects change it by '+sg(t)+'% and the boss\'s effects change it by '+sg(a)+'%. The boss mostly '+(st?'uses status effects':'hits you directly')+'. Is a Parry tank a good plan?',
+  a:'Your parry chance is '+c+'%'+(x>95?' (it would be '+x+'%, but parry stops at 95%)':'')+'. '+(st?'Probably not the best plan: only direct attacks can be parried, and of status effects only the bad ones (debuffs), so many of its statuses will still land (best guess).':(c>=50?'A good plan: direct hits are exactly what Parry blocks, so about '+c+' of every 100 of its direct hits do nothing (best guess).':'Parry works on this boss, but at '+c+'% only about '+c+' of every 100 of its direct hits do nothing, so raise your Parry first (best guess).')),
   v:[p,t,a],chk:c+'% parry chance'};},
 3:function(){var vr=pk(['lose','gain','guts']),m=ri(3,9),c=ri(vr==='lose'?1:0,m),g=ri(1,3),u=pk([0,15,20,25,30]);
  var gain=Math.max(c,Math.min(m,c+g)),lose=Math.max(0,c-g),q,a,chk,r2=[],kk=vr==='lose'?'Does Guts keep the stack, and what changes at 0 stacks?':vr==='gain'?'Is there a maximum, and can part of the gain be wasted?':'Which helps more here: one more stack or more Guts, and does it depend on how many stacks you already have?';
- if(vr==='lose'){q='You have '+c+' of '+m+' HP stacks. An effect is about to remove '+g+' of them and your Guts is '+u+'%. How many stacks will you really have left?';
+ if(vr==='lose'){q='You have '+c+' of '+m+' HP stacks. An effect is about to remove '+g+' of them. Your Guts is '+u+'%. How many stacks will you have left?';
   a='If the Guts roll fails you drop to '+lose+' (never below 0). '+(u>0?'Guts '+u+'% is the chance that the stack is kept, so about '+u+' times in 100 you stay at '+c+'. ':'With Guts 0 the stack is always lost. ')+(lose===0?'At 0 stacks you no longer have an extra life.':'You stay alive while you have HP or at least 1 stack.');chk='Lose: '+lose;
-  if(u>0)r2.push('H:The upper limit of the Guts stat is not confirmed, so treat the Guts percent as an estimate.');}
+  if(u>0)r2.push('V:Guts is limited to 0..95%, so a stack is never 100% safe.');}
  else if(vr==='gain'){q='You have '+c+' of '+m+' HP stacks and an effect is about to give you '+g+' more. How many will you have, and is it worth it?';
   a=(c>=m?'You are already full ('+m+' of '+m+'), so nothing is gained.':'You end up with '+gain+': the gain is capped at the maximum of '+m+(c+g>m?', so '+(c+g-m)+' of the '+g+' is wasted.':', so nothing is wasted.'))+' In the game you can hold at most 9 HP stacks.';chk='Gain: '+gain;}
  else{var s=ri(3,8),dg=pk([10,15,20]),q0=1-u/100,q1=1-(u+dg)/100,A0=s/q0,A1=(s+1)/q0,A2=s/q1,r1=function(x){return Math.round(x*10)/10;},be=(100-u-dg)/dg;
-  q='A boss fight is coming and it will keep knocking you down to 0 HP. You start with '+s+' HP stacks and '+u+'% Guts. You can take only ONE upgrade: one gives +1 max HP stack, the other gives +'+dg+' Guts. Which one keeps you alive through more knock-downs?';
-  a='Each knock-down to 0 HP spends one stack unless your Guts roll keeps it, so on average you can absorb stacks / (1 - Guts) knock-downs before the one that kills you. Now: '+s+' stacks at '+u+'% Guts = about '+r1(A0)+'. With +1 max stack ('+(s+1)+' stacks): about '+r1(A1)+' (+'+r1(A1-A0)+'). With +'+dg+' Guts ('+(u+dg)+'%): about '+r1(A2)+' (+'+r1(A2-A0)+'). '+(A1>A2+0.005?'The extra stack is the better pick here.':A2>A1+0.005?'The extra Guts is the better pick here.':'Both picks are worth the same here.')+' At this Guts level the break-even is '+r1(be)+' stacks: Guts is the better pick above it, the extra stack below it. Guts also gives the same save chance against effects that remove HP stacks.';
+  q='A boss will keep knocking you down to 0 HP. You start with '+s+' HP stacks and '+u+'% Guts. Pick ONE upgrade: +1 max HP stack, or +'+dg+' Guts. Which keeps you alive longer?';
+  a=(A1>A2+0.005?'Take the extra stack. ':A2>A1+0.005?'Take the extra Guts. ':'Both are worth the same. ')+'Each knock-down to 0 HP uses one stack unless Guts saves it, so on average you survive about stacks / (1 - Guts) knock-downs. Now: '+s+' stacks at '+u+'% Guts = about '+r1(A0)+'. With +1 max stack ('+(s+1)+' stacks): about '+r1(A1)+' (+'+r1(A1-A0)+'). With +'+dg+' Guts ('+(u+dg)+'%): about '+r1(A2)+' (+'+r1(A2-A0)+'). '+'Rule of thumb at this Guts level: with more than '+r1(be)+' stacks, Guts helps more; with fewer, the extra stack does. Guts also protects against effects that remove HP stacks.';
   chk='Average: '+r1(A0);
   r2.push('V:You start every fight with full HP stacks, so +1 max stack counts from the first knock-down.');
-  r2.push('H:This is an average over many fights. It assumes each knock-down is one Guts roll and nothing else gives or removes stacks; the exact moment the stack is spent and the upper limit of the Guts stat are not confirmed.');}
+  r2.push('H:This is an average over many fights. It assumes each knock-down is one Guts roll and nothing else gives or removes stacks; exactly when the stack is used is not certain.');}
  return {q:q,k:kk,a:a,v:vr==='guts'?undefined:[c,m,g,u],chk:chk,r2:r2,nf:vr==='guts'?1:0};},
 4:function(){var ail=pk(['Bleed','Burn','Poison','Explode','Frostbite','Hex']),s=ri(40,100,10),e=ri(0,50,5),r=ri(0,60,5),oe=ri(0,20,5),ore=ri(0,20,5),T=pk([75,80,90]);
  var w=s+e+oe-r-ore,c=cl(w,5,95),need=T-w;
- return {q:'Your '+ail+' keeps failing on a boss. Skill value '+s+', your Effective '+e+(oe?' (plus '+oe+' for '+ail+')':'')+', the boss\'s Resist '+r+(ore?' (plus '+ore+' against '+ail+')':'')+'. You want it to land at least '+T+' times in 100. What do you change?',
-  a:'Right now the chance is '+c+'% (raw '+w+'). '+(c>=T?'That already meets your goal of '+T+'%. It can never go above 95%, so extra Effective beyond that is wasted.':'You need '+need+' more points: raise your Effective by '+need+' or lower the boss\'s Resist by '+need+'; both count the same. The result is always limited to 5..95%.'),
+ return {q:'Your '+ail+' keeps failing on a boss. The skill\'s value is '+s+', your Effective is '+e+(oe?' (plus '+oe+' for '+ail+')':'')+', and the boss\'s Resist is '+r+(ore?' (plus '+ore+' against '+ail+')':'')+'. You want it to land at least '+T+' times in 100. What do you change?',
+  a:(c>=T?'Nothing: it already lands '+c+'% of the time.':'Add '+need+' Effective, or lower the boss\'s Resist by '+need+'.')+' Chance now = '+s+' + '+e+(oe?' + '+oe:'')+' - '+r+(ore?' - '+ore:'')+' = '+w+(w!==c?', which becomes '+c+'% (the chance always stays between 5% and 95%)':'%')+'. '+(c>=T?'Your goal is '+T+'%, so more Effective would be wasted here.':'Both changes count the same, point for point.'),
   v:[s,e,r,oe,ore],chk:c+'% ailment chance'};},
 5:function(){var c0=ri(10,60,5),b0=ri(0,25,5),m=pk([50,75,100,125,150,200]),e=ri(0,30,5),A=ri(20,60,10);
  var X=cl((c0+b0)*m/100-e,5,95),Y=cl(X+10,5,95);
  var av=function(x,pen){return x/100*150+(1-x/100)*(pen?100:100-A);};
  var n0=av(X,0),np=av(X,1),nc=av(Y,0),gp=np-n0,gc=nc-n0;
- var vd=gp>gc+0.005?'Armor penetration is the better extra here.':gc>gp+0.005?'More crit chance is the better extra here.':'Both extras are worth the same here.';
- return {q:'Your Crit Rate is '+c0+', your skill adds '+b0+' crit bonus with a crit multiplier of '+m+'%, and the target has '+e+' Avoid Crit and '+A+'% armor. Is it better to add +10 crit chance or armor penetration?',
-  a:'Your crit chance is '+f(X)+'%. A crit does 150 for every 100 base damage and ignores positive armor, while a normal hit against '+A+'% armor does only '+(100-A)+'. Average per 100 base damage: now '+f(n0)+'; with armor penetration '+f(np)+' (+'+f(gp)+'); with +10 crit chance '+f(nc)+' (+'+f(gc)+'). '+vd,
+ var vd=gp>gc+0.005?'Take the armor-piercing rune.':gc>gp+0.005?'Take the +10 crit chance.':'Both are worth the same.';
+ return {q:'Your crit chance against a boss with '+A+'% armor works out to '+f(X)+'% (your Crit Rate '+c0+' + the skill\'s '+b0+', times the skill\'s '+m+'%, minus the boss\'s '+e+' Avoid Crit). Which helps more: +10 crit chance, or a rune that pierces the boss\'s armor?',
+  a:vd+' For every 100 base damage, a crit does 150 and ignores armor; a normal hit against '+A+'% armor does only '+(100-A)+'. Average now: '+f(n0)+'. With the armor-piercing rune: '+f(np)+' (+'+f(gp)+'). With +10 crit chance: '+f(nc)+' (+'+f(gc)+'). Piercing only helps your normal hits, so it wins when your crit chance is low.',
   v:[c0,b0,m,e],chk:f(X)+'%',r2:['H:The averages ignore every other modifier and assume independent hits.']};},
 6:function(){var kind=pk(['HP','shield']),r0=ri(100,3000,50),e=ri(0,100,5),g=ri(20,200,10);
  var mx=function(r){return Math.max(1,rh(rh(r*0.85)*(1+e/100)));};
  var m0=mx(r0),m1=mx(r0+g);
- return {k:'What happens to every raw point before the percent bonus applies?',q:'Your raw base '+kind+' is '+N(r0)+' and your job, race and gear give +'+e+'% extra. A piece of gear adds '+g+' raw '+kind+'. How much do you really gain?',
-  a:'Max '+kind+' is '+N(m0)+' now and '+N(m1)+' with the piece: +'+N(m1-m0)+', not +'+g+'. Every raw point first loses 15% (x0.85) and then the +'+e+'% applies on top, so each raw point is worth about '+f((m1-m0)/g)+'. Damage hits the shield first and then HP, so for ordinary hits both act as one pool.',
+ return {k:'What happens to a raw point before your percent bonus is added?',q:'Your raw '+kind+' is '+N(r0)+' and your job, race and gear give +'+e+'% extra. New gear adds '+g+' raw '+kind+'. How much '+kind+' do you really gain?',
+  a:'+'+N(m1-m0)+', not +'+g+'. Every raw point is first cut to 85% (x0.85), then your +'+e+'% is added, so each raw point is worth about '+f((m1-m0)/g)+'. Max '+kind+': '+N(m0)+' now, '+N(m1)+' with the gear.',
   v:[r0,e],chk:N(m0)};},
 9:function(){var k=ri(2,5),t=ri(1,10),dg=pk(['its strongest hit','the skill that stuns you','the skill that drains your shield','its healing skill']);
  var p=(1-Math.pow(1-1/k,t))*100,tn=t+' turn'+(t>1?'s':'');
  return {q:'An enemy has '+k+' usable skills and one of them is '+dg+'. Over the next '+tn+', how likely are you to see it?',
-  a:'With no priority runes it picks uniformly at random (estimate): 1 in '+k+' per turn = '+f(100/k)+'%. Over '+tn+' the chance to see it at least once is '+f(p)+'%, and on average it shows up after about '+k+' turns. Skills on cooldown or out of uses leave the pool, which raises the odds for the rest.',
+  a:'About '+f(p)+'%, if it picks evenly (likely, not certain). That is 1 in '+k+' each turn = '+f(100/k)+'%; over '+tn+' the chance to see it at least once is '+f(p)+'%, and on average it shows up after about '+k+' turns. Skills on cooldown or with no uses left drop out, which raises the odds for the others.',
   v:[k,t],chk:f(p)+'%'};},
 11:function(){var d=ri(1000000,9000000,500000),A=ri(20,150,10),Bn=ri(20,150,10),Cn=ri(20,100,10);
  var tot=function(x){return rh(d*((1+A/100)*(1+Bn/100)*(1+x/100)));};
  var t0=tot(0),t1=tot(Cn),n0=Math.min(t0,CAP),n1=Math.min(t1,CAP);
- return {q:'One of your hits does '+N(d)+' before bonuses, with +'+A+'% and +'+Bn+'% damage bonuses already active. A new piece offers another +'+Cn+'%. Is it worth taking?',
-  a:n0>=CAP?'You are already at the cap of 9,999,999 per hit ('+N(t0)+' before the cap), so the new +'+Cn+'% adds nothing. Extra power only helps through more hits, ailment damage or surviving longer.':'Now a hit does '+N(n0)+'; with the piece '+N(n1)+' (+'+N(n1-n0)+')'+(t1>CAP?', and '+N(t1-CAP)+' above the cap is wasted':'')+'. One hit can never go above 9,999,999.',
+ return {q:'One of your hits does '+N(d)+' before bonuses, and you already have +'+A+'% and +'+Bn+'% damage bonuses. New gear offers another +'+Cn+'%. Is it worth it?',
+  a:n0>=CAP?'No. You are already at the cap of 9,999,999 per hit (it would be '+N(t0)+'), so the new +'+Cn+'% adds nothing. Get stronger with more hits, damage over time, or by surviving longer.':(t1>CAP?'Only partly. ':'Yes. ')+'Now a hit does '+N(n0)+'; with the gear '+N(n1)+' (+'+N(n1-n0)+')'+(t1>CAP?', and '+N(t1-CAP)+' above the cap is wasted':'')+'. One hit can never go above 9,999,999.',
   v:[d,A,Bn,Cn],chk:N(n1)};},
 12:function(){var d=ri(100000,600000,50000),nb=pk([2,2,3]),A=ri(20,150,10),Bn=ri(20,150,10),Cn=nb===3?ri(20,100,10):0;
  var ps=[A,Bn].concat(nb===3?[Cn]:[]),p=(1+A/100)*(1+Bn/100)*(1+Cn/100),sum=A+Bn+Cn,mu=Math.min(rh(d*p),CAP),ad=rh(d*(1+sum/100));
- return {k:'Is each bonus applied to the base damage, or to the result of the previous one?',q:'Your build has '+(nb===3?'three damage bonuses of +'+A+'%, +'+Bn+'% and +'+Cn+'%':'two damage bonuses of +'+A+'% and +'+Bn+'%')+', each from a different step of the damage chain. Do they simply add together?',
-  a:'No, they multiply: '+ps.map(function(x){return f(1+x/100);}).join(' x ')+' = '+f(p)+', which is +'+f((p-1)*100)+'% in total, not +'+sum+'%. On '+N(d)+' base damage that is '+N(mu)+' instead of '+N(ad)+' (+'+N(mu-ad)+' extra).',
+ return {k:'Is each bonus applied to the base damage, or to the result of the one before?',q:'Your build has '+(nb===3?'three damage bonuses, +'+A+'%, +'+Bn+'% and +'+Cn+'%':'two damage bonuses, +'+A+'% and +'+Bn+'%')+', each from a different kind of effect. Do they just add up?',
+  a:'No, they multiply, so you get more: '+ps.map(function(x){return f(1+x/100);}).join(' x ')+' = '+f(p)+', which is +'+f((p-1)*100)+'% in total, not +'+sum+'%. On '+N(d)+' base damage that is '+N(mu)+' instead of '+N(ad)+' (+'+N(mu-ad)+' extra).',
   v:[d,A,Bn,Cn],chk:N(mu)};},
 13:function(){var kind=pk(['a dungeon boss','a conquest boss','a disaster boss','a normal enemy']),ph=pk(['it still has not dropped','it keeps not dropping']),w=100,wc=1000;
  var pl=function(x){var p=x/10000;return {k50:Math.ceil(Math.log(0.5)/Math.log(1-p)),k90:Math.ceil(Math.log(0.1)/Math.log(1-p))};},p0=pl(w),p1=pl(wc);
  return {q:'You are farming the capture item of '+kind+' (drop chance '+f(w/100)+'%) and '+ph+'. How many kills should you plan for, without Capture and with Capture on the enemy?',
-  a:'Without Capture: each kill gives '+f(w/100)+'%, about 1 in '+f(10000/w)+' kills. For a 50% chance of at least one drop plan about '+p0.k50+' kills; for 90% plan about '+p0.k90+'.\n\nWith Capture: each kill gives '+f(wc/100)+'%, about 1 in '+f(10000/wc)+' kills. For a 50% chance of at least one drop plan about '+p1.k50+' kills; for 90% plan about '+p1.k90+'.\n\nAn enemy gives only one reward, so more kills is the only other lever.',
-  v:[w/100,100],chk:f(w/100)+'% per kill',r2:['V:Each kill is a separate roll, so the plan numbers are the chance of at least one drop in that many kills.','V:With Capture only capture items change (1% becomes 10%); every other drop keeps its chance.']};}
+  a:'Without Capture: each kill gives '+f(w/100)+'%, about 1 in '+f(10000/w)+' kills. For a 50% chance of at least one drop plan about '+p0.k50+' kills; for 90% plan about '+p0.k90+'.\n\nWith Capture (likely, not certain): each kill gives '+f(wc/100)+'%, about 1 in '+f(10000/wc)+' kills. For a 50% chance of at least one drop plan about '+p1.k50+' kills; for 90% plan about '+p1.k90+'.\n\nAn enemy gives only one reward, so more kills is the only other lever.',
+  v:[w/100,100],chk:f(w/100)+'% per kill',r2:['V:Each kill is a separate roll, so the plan numbers are the chance of at least one drop in that many kills.','H:Capture probably raises only the capture item (1% becomes 10%); every other drop keeps its chance. Not certain.']};}
+,
+15:function(){var o=pk(SKD().filter(function(x){return x.or;})),sk=SKD();if(Math.random()<0.5||!o)return skA(pk(sk));return skC(o);},
+16:function(){var a=pk(SKD()),b=pk(SKD().filter(function(x){return x.key!==a.key;}));if(Math.random()<0.5&&b)return skB(a,b);var ad=pk(SKD().filter(function(x){return !x.or&&x.st.length>1;}));return ad?skD(ad):skA(a);}
 };
+var SKL=null,AB={STR:'STR',DEX:'DEX',INT:'INT',PIE:'PIE'};
+function SKD(){if(SKL)return SKL;SKL=[];var F=ASK.facts&&ASK.facts.get?ASK.facts.get():null;
+  ((F&&F.skillRows)||[]).forEach(function(r){var t=String(r.t||'').split(/ \/ [^\/]{2,40} \/ \[On Use\]/)[0].replace(/\s+/g,' ').replace(/(STR|DEX|INT|PIE)([a-zA-Z]*)or /g,'$1$2 or ');
+    var m=/(?:\(x(\d+)\)\s*)?Direct attack your opponent\.?\s*(\d[\d,]*)%\s*of\s+(?:your\s+)?((?:(?:STR|DEX|INT|PIE)[A-Za-z]*\s*(?:\+|or)\s*)*(?:STR|DEX|INT|PIE)[A-Za-z]*)/.exec(t);if(!m)return;
+    var st=(m[3].match(/(STR|DEX|INT|PIE)(?=[A-Za-z]*)/g)||[]).map(function(x){return AB[x];}),bon=/Enhance power by (\d+)% per (?:your )?([A-Za-z' ]+?)(?= \+?\d| \d|$)/.exec(t);
+    var sr=/^\s*([1-7])★/.exec(String(r.t||''));
+    SKL.push({key:r.n,n:r.n,pct:+m[2].replace(/,/g,''),hits:+(m[1]||1),st:st,or:/\bor\b/.test(m[3]),stars:sr?+sr[1]:0,bon:bon?'+'+bon[1]+'% power per '+bon[2].trim():''});});
+  return SKL;}
+function skDesc(x){return x.n+(x.stars?' ('+x.stars+'★)':'')+' hits'+(x.hits>1?' '+x.hits+' times for':' for')+' '+x.pct+'% of your '+x.st.join(x.or?' or ':' + ');}
+function skBase(x,v){var u=x.st.map(function(k){return v[k];}),b=x.or?Math.max.apply(null,u):u.reduce(function(a,c){return a+c;},0);return {b:b,d:x.pct*b/100*x.hits};}
+function skHow(x,v){var u=x.st.map(function(k){return k+' '+v[k];});return x.or?x.pct+'% x your highest of '+u.join(', ')+' ('+skBase(x,v).b+')':x.pct+'% x ('+x.st.map(function(k){return v[k];}).join(' + ')+')';}
+function stats(x){var v={};x.forEach(function(k){v[k]=ri(10,90,5);});return v;}
+function after(x){return ' That is the base number: damage bonuses, the element, the target\'s armor and crits come after it'+(x.bon?', and so does its own '+x.bon:'')+'.';}
+function skA(x){var v=stats(x.st),r=skBase(x,v);
+  return {q:skDesc(x)+'. Your '+x.st.map(function(k){return k+' is '+v[k];}).join(' and your ')+'. How much does one cast do before any bonuses?',
+    a:skHow(x,v)+(x.hits>1?' x '+x.hits+' hits':'')+' = '+f(r.d)+'.'+(x.or?' A choice ("or") always takes your highest stat, so the other one does not count.':'')+after(x),chk:f(r.d),nf:1,b:'Tell me about '+x.n,bl:'What does '+x.n+' do?'};}
+function skC(x){var v=stats(x.st),hi=x.st.reduce(function(a,k){return v[k]>v[a]?k:a;},x.st[0]),lo=x.st.filter(function(k){return k!==hi;})[0],n=pk([5,10,15,20]);
+  if(v[hi]===v[lo])v[hi]+=5;
+  var now=x.pct*v[hi]/100,upH=x.pct*(v[hi]+n)/100,lo2=v[lo]+n,upL=x.pct*Math.max(v[hi],lo2)/100;
+  return {q:skDesc(x)+'. Your '+hi+' is '+v[hi]+' and your '+lo+' is '+v[lo]+'. You can add +'+n+' to only ONE of them. Which one helps this skill?',
+    k:'A choice ("or") uses only your highest stat. Which one is that now, and does +'+n+' change it?',
+    a:'Now it uses your '+hi+' ('+v[hi]+'): '+x.pct+'% x '+v[hi]+' = '+f(now)+'. With +'+n+' '+hi+': '+x.pct+'% x '+(v[hi]+n)+' = '+f(upH)+'. With +'+n+' '+lo+': '+lo+' becomes '+lo2+(lo2>v[hi]?', now your highest, so '+x.pct+'% x '+lo2+' = '+f(upL)+'.':', still lower than '+hi+', so the skill still uses '+hi+' and nothing changes ('+f(upL)+').')+' '+(upH>upL?'Add it to '+hi+'.':upL>upH?'Add it to '+lo+'.':'Both give the same.')+after(x),chk:f(Math.max(upH,upL)),nf:1,b:'Tell me about '+x.n,bl:'What does '+x.n+' do?'};}
+function skB(a,b){var v=stats(['STR','DEX','INT','PIE']),ra=skBase(a,v),rb=skBase(b,v);
+  return {q:'Your stats are STR '+v.STR+', DEX '+v.DEX+', INT '+v.INT+' and PIE '+v.PIE+'. Which hits harder before bonuses: '+skDesc(a)+', or '+skDesc(b)+'?',
+    a:a.n+': '+skHow(a,v)+(a.hits>1?' x '+a.hits+' hits':'')+' = '+f(ra.d)+'. '+b.n+': '+skHow(b,v)+(b.hits>1?' x '+b.hits+' hits':'')+' = '+f(rb.d)+'. '+(ra.d>rb.d?a.n+' hits harder here.':rb.d>ra.d?b.n+' hits harder here.':'They hit the same here.')+' A skill that names your best stats can beat one with a bigger percent.'+after({bon:''}),chk:f(Math.max(ra.d,rb.d)),nf:1,b:'Compare '+a.n+' and '+b.n,bl:'Compare them'};}
+function skD(x){var v=stats(x.st),n=pk([5,10,15,20]),r=skBase(x,v),up=x.pct*(r.b+n)/100*x.hits;
+  return {q:skDesc(x)+'. Your '+x.st.map(function(k){return k+' is '+v[k];}).join(', ')+'. You can add +'+n+' to only ONE of '+x.st.join(' or ')+'. Which one helps this skill more?',
+    k:'Does the skill add its stats together, or pick one of them?',
+    a:'It adds them ("+"), so every point counts the same: '+x.pct+'% x '+n+(x.hits>1?' x '+x.hits+' hits':'')+' = +'+f(x.pct*n/100*x.hits)+' whichever you raise ('+f(r.d)+' becomes '+f(up)+'). Pick the stat that also helps your other skills.'+after(x),chk:f(up),nf:1,b:'Tell me about '+x.n,bl:'What does '+x.n+' do?'};}
 var ALT={
-0:[function(){var n=ri(2,6),p=Math.pow(2/3,n)*100;return {q:'You plan to fight '+n+' bosses in a row and your plan needs you to act first in EVERY one of them. What are your chances?',k:'Does each fight roll the dice again, and do the chances add or multiply?',
- a:'You open a fight 2 times in 3 (66.67%) and the enemy opens 1 time in 3; speed does not change that. Opening all '+n+' fights is (2/3)^'+n+' = '+f(p)+'%, about 1 time in '+f(100/p)+'. So the enemy opens at least one of them '+f(100-p)+'% of the time: keep a plan for that.',v:[n],chk:f(100-p)+'%'};}],
-1:[function(){var a=ri(40,70,5),x=pk([10,15,20,25]),d=ri(20000,400000,10000),ar=function(y){return cl(rh(d*(1-Math.min(75,y)/100)),0,CAP);},b=ar(a),w=ar(a+x),lim=Math.max(0,Math.min(75,a+x)-a);return {q:'A boss hit does '+N(d)+' before armor and you have '+a+'% normal armor. New gear gives +'+x+' armor. How much damage does it really save per hit?',k:'Is there a limit, and can part of the bonus be wasted?',
- a:'Armor stops at 75, so you only get '+lim+' of the +'+x+' points. A hit does '+N(b)+' now and '+N(w)+' with the gear, saving '+N(b-w)+' per hit.'+(lim<x?' '+(x-lim)+' points are wasted, so another stat may be worth more.':' All of it counts.'),v:[d,a+x,0,0],chk:N(w)};}],
-2:[function(){var p=ri(20,80,5),t=ri(0,30,10),a=ri(-10,20,10),F=pk([10,15,20]),P=pk([10,20]),pr=function(s,u){return cl(rh(rh(s*(100+u)/100)*(100+a)/100),0,95);},c0=pr(p,t),cF=pr(p+F,t),cP=pr(p,t+P);return {q:'Your Parry stat is '+p+', your own effects change it by '+sg(t)+'% and the attacker\'s effects by '+sg(a)+'%. You can take ONE upgrade: +'+F+' Parry stat, or +'+P+'% parry from your own effects. Which one blocks more direct hits?',k:'Which number is multiplied by which, and where does it stop?',
- a:'Now you parry '+c0+'%. With +'+F+' stat: '+cF+'%. With +'+P+'% effect: '+cP+'%. '+(cF>cP?'The flat Parry stat is better here.':cP>cF?'The percent bonus is better here.':'Both give the same result here.')+' Parry stops at 95, and only direct attacks can be parried.',v:[p,t,a],chk:c0+'% parry chance'};}],
-4:[function(){var ail=pk(['Bleed','Burn','Poison','Explode','Frostbite','Hex']),e=ri(0,50,5),r=ri(10,70,5),s1=ri(30,70,10),s2=s1+ri(10,30,10),n=ri(2,4),cc=function(s){return cl(s+e-r,5,95);},c1=cc(s1),c2=cc(s2),at=function(c){return 100*(1-Math.pow(1-c/100,n));};return {q:'The boss has '+r+' Resist and your Effective is '+e+'. Your '+ail+' skill A has value '+s1+' and skill B has value '+s2+'. You have '+n+' turns. Which skill is more likely to land '+ail+' at least once?',k:'Is the stronger skill always worth it, and where does the chance stop?',
- a:'Skill A lands '+c1+'% per try and skill B '+c2+'%. Over '+n+' turns that is '+f(at(c1))+'% for A and '+f(at(c2))+'% for B. '+(c1===c2?'Both are limited to the same 5..95 range here, so the stronger skill adds nothing.':'Skill B is better by '+f(at(c2)-at(c1))+' points.')+' Each try is limited to 5..95%.',v:[s1,e,r,0,0],chk:c1+'% ailment chance'};}]
+0:[function(){var n=ri(2,6),p=Math.pow(2/3,n)*100;return {q:'You will fight '+n+' bosses in a row and your plan needs you to move first in EVERY fight. What are your chances?',k:'Each fight is a new roll. Do the chances add up, or multiply?',
+ a:'You move first 2 times in 3 (66.67%); speed does not change that. For all '+n+' fights that is 2/3 multiplied '+n+' times = '+f(p)+'% (about 1 time in '+f(100/p)+'). So '+f(100-p)+'% of the time at least one boss moves first: keep a plan for that.',v:[n],chk:f(100-p)+'%'};}],
+1:[function(){var a=ri(40,70,5),x=pk([10,15,20,25]),d=ri(20000,400000,10000),ar=function(y){return cl(rh(d*(1-Math.min(75,y)/100)),0,CAP);},b=ar(a),w=ar(a+x),lim=Math.max(0,Math.min(75,a+x)-a);return {q:'A boss hit does '+N(d)+' before armor and you have '+a+'% normal armor. New gear gives +'+x+' armor. How much damage does it really save per hit?',k:'Is there a top limit for armor?',
+ a:'You save '+N(b-w)+' per hit. Armor stops at 75%, so you only get '+lim+' of the +'+x+'. A hit does '+N(b)+' now and '+N(w)+' with the gear.'+(lim<x?' '+(x-lim)+' points are wasted, so another stat may be worth more.':' All of it counts.'),v:[d,a+x,0,0],chk:N(w)};}],
+2:[function(){var p=ri(20,80,5),t=ri(0,30,10),a=ri(-10,20,10),F=pk([10,15,20]),P=pk([10,20]),pr=function(s,u){return cl(rh(rh(s*(100+u)/100)*(100+a)/100),0,95);},c0=pr(p,t),cF=pr(p+F,t),cP=pr(p,t+P);return {q:'Your Parry stat is '+p+', your own effects change it by '+sg(t)+'% and the boss\'s effects by '+sg(a)+'%. Pick ONE upgrade: +'+F+' Parry stat, or +'+P+'% parry from your own effects. Which blocks more direct hits?',k:'The percent is applied on top of the stat. Where does parry stop?',
+ a:(cF>cP?'Take the +'+F+' Parry stat.':cP>cF?'Take the +'+P+'% effect.':'Both give the same.')+' Now you parry '+c0+'%. With +'+F+' stat: '+cF+'%. With +'+P+'% effect: '+cP+'%. Parry stops at 95%, and only direct attacks can be parried.',v:[p,t,a],chk:c0+'% parry chance'};}],
+4:[function(){var ail=pk(['Bleed','Burn','Poison','Explode','Frostbite','Hex']),e=ri(0,50,5),r=ri(10,70,5),s1=ri(30,70,10),s2=s1+ri(10,30,10),n=ri(2,4),cc=function(s){return cl(s+e-r,5,95);},c1=cc(s1),c2=cc(s2),at=function(c){return 100*(1-Math.pow(1-c/100,n));};return {q:'The boss has '+r+' Resist and your Effective is '+e+'. Your '+ail+' skill A has value '+s1+' and skill B has value '+s2+'. You have '+n+' turns. Which skill is more likely to land '+ail+' at least once?',k:'Is the stronger skill always better, and where does the chance stop?',
+ a:(c1===c2?'Neither: they are the same here.':'Skill B, by '+f(at(c2)-at(c1))+' points.')+' Per try: A lands '+c1+'%, B lands '+c2+'%. Over '+n+' turns: A '+f(at(c1))+'%, B '+f(at(c2))+'%.'+(c1===c2?' Both hit the 5..95% limit, so the stronger skill adds nothing.':' Each try stays between 5% and 95%.'),v:[s1,e,r,0,0],chk:c1+'% ailment chance'};}]
 };
 function make(i){var o=null,c={},k,g=G[i],al=ALT[i];if(al&&Math.random()<al.length/(al.length+1))g=al[Math.floor(Math.random()*al.length)];if(g){try{o=g();}catch(e){ASK.err('challenge: make '+i,e);o=null;}}for(k in B[i])c[k]=B[i][k];if(o)for(k in o)c[k]=o[k];c.i=i;c.gen=!!o;return c;}
 var CM={0:'first',1:'armor',2:'parry',3:'stacks',4:'ailment',5:'crit',6:'maxhp',9:'pick',11:'damage',12:'damage',13:'drop'};
@@ -13293,20 +13544,20 @@ var CM={0:'first',1:'armor',2:'parry',3:'stacks',4:'ailment',5:'crit',6:'maxhp',
       return o;
     }
     var pa = String(c.a).split('\n\n'), ans = pa.length > 1 ? pa.map(function (t) { return {para: bf(t)}; }) : bf(pa[0]);
-    est.forEach(function (x) { body.push({line: [tag('Estimate:'), x]}); });
-    com.forEach(function (x) { body.push({line: [tag('Computed:'), x]}); });
-    body.push({line: [tag('Best estimate:', '--accent'), ans], style: 'border-left:3px solid var(--accent);padding-left:8px;margin:10px 0 6px'});
+    est.forEach(function (x) { body.push({line: [tag('Not certain:'), x]}); });
+    com.forEach(function (x) { body.push({line: [tag('Checked rule:'), x]}); });
+    body.push({line: [tag('Answer:', '--accent'), ans], style: 'border-left:3px solid var(--accent);padding-left:8px;margin:10px 0 6px'});
     if (fo) body.push({line: [tag('Formula:'), fo]});
     return body;
   }
   function show(i, rev, keep) {
     var c; cur = i; if (!keep || !cc || cc.i !== i) cc = make(i); c = cc;
-    var body = [{note: 'Challenge: ' + c.t}, {line: {b: c.q}}, {line: 'Think first: ' + c.k}];
+    var body = [{note: 'Challenge: ' + c.t}, {line: {b: c.q}}, {line: 'Hint: ' + c.k}];
     if (rev) body = body.concat(reveal(c, i));
     var bt = [];
-    if (!rev) bt.push(['rev', 'Show best estimate']);
+    if (!rev) bt.push(['rev', 'Show the answer']);
     if (rev && CM[i] && c.v) bt.push(['calc', 'Open calculator to test it', CM[i]]);
-    if (c.b) bt.push(['try', 'What build for this?', c.b]);
+    if (c.b) bt.push(['try', c.bl || 'What build for this?', c.b]);
     bt.push(['next', 'Another challenge']);
     body.push({chbtns: bt});
     return {title: null, mark: {}, body: body};
@@ -13644,6 +13895,8 @@ function custom(raw){var p=nz(raw).trim(),w=p?p.split(' ').length:0;if(!p||w>10)
     a.mark = top ? {'data-keep': '1', 'data-mech-top': '1', 'data-intent': '1', 'data-mech': '1'} : {'data-keep': '1', 'data-intent': '1', 'data-mech': '1'};
     return card(a);
   };
+  ASK.isSimulate = function (raw) { try { return ASK.router.rules(raw, ASK.facts.get(), {everyday: everyday}).c.intent === 'simulate'; } catch (e) { ASK.err('rules: simulate check', e); return false; } };
+  ASK.isRuleChip = function (raw) { try { return ASK.router.isChip(raw, ASK.facts.get()); } catch (e) { ASK.err('rules: chip check', e); return false; } };
   ASK.calc = function (raw) {
     var a = null;
     try { a = ASK.tools.rules.quick(raw); } catch (e) { ASK.err('calc: quick', e); return null; }
@@ -13681,6 +13934,7 @@ function custom(raw){var p=nz(raw).trim(),w=p?p.split(' ').length:0;if(!p||w>10)
     W.QA.first('brain', function (raw, e) {
       if (W.__askOff) return false;
       try { if (W.__qaTalk && W.__qaTalk.social && W.__qaTalk.social(raw)) return false; } catch (x) { ASK.err('brain: social check', x); }
+      try { if (W.QA.core2 && W.QA.core2.exact && W.QA.core2.exact(raw)) return false; } catch (x) { ASK.err('brain: exact name check', x); }
       var A = null;
       try { A = ASK.answer(raw); } catch (x) { ASK.err('brain: answer', x); return false; }
       if (!A) return false;

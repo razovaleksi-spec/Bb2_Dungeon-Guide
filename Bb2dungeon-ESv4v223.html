@@ -300,7 +300,8 @@ td.dungeon .boss-loot{display:block;margin-top:2.1em;color:#edb72a;-webkit-text-
 .ld-head img{width:44px;height:44px;object-fit:contain}
 .ld-cat{text-align:right;color:#17e517;font-size:18px;margin-bottom:4px}
 .ld-main{color:#fff;font-size:19px;line-height:1.35;margin:0 0 14px;white-space:pre-line}
-.ld-note{color:#d0d0d0;font-size:13.5px;line-height:1.4;margin:0}</style>
+.ld-note{color:#d0d0d0;font-size:13.5px;line-height:1.4;margin:0}
+#qaOut.qa-settling{opacity:0}</style>
 </head>
 <body>
 <header>
@@ -5062,6 +5063,9 @@ function askIcon(kind, name){
       const d = ITEM_DETAILS[name + '::' + kind] || ITEM_DETAILS[name];
       return d && d.icon ? d.icon : '';
     }
+    if(kind === 'loot' && typeof BOSS_LOOT !== 'undefined'){
+      for(const b in BOSS_LOOT){ const it = (BOSS_LOOT[b] || []).filter(function(x){ return x && x.name === name; })[0]; if(it) return it.icon || ''; }
+    }
   }catch(e){}
   return '';
 }
@@ -5071,6 +5075,7 @@ function titleKind(sub){
   if(/\bcontract$/.test(t)) return 'contract';
   if(/\brune$/.test(t)) return 'rune';
   if(/\bskill$/.test(t)) return 'skill';
+  if(/^loot\b/.test(t)) return 'loot';
   const m = /\b(weapon|armor|accessory)$/.exec(t);
   return m ? m[1] : '';
 }
@@ -5106,6 +5111,12 @@ function titleKind(sub){
     out.querySelectorAll('.qa-card .item.qa-chip[data-item]').forEach(function(c){
       if(c.querySelector('.qa-chip-ic') || (c.closest('.qa-title') && c.closest('.qa-title').querySelector('.pt-icon'))) return;
       const src = askIcon(c.getAttribute('data-slot') || 'skill', c.getAttribute('data-item'));
+      if(src) c.insertBefore(pic('qa-chip-ic', src), c.firstChild);
+    });
+    out.querySelectorAll('.qa-card .qa-chip[data-lt]').forEach(function(c){
+      c.style.cursor = 'pointer';
+      if(c.querySelector('.qa-chip-ic') || (c.closest('.qa-title') && c.closest('.qa-title').querySelector('.pt-icon'))) return;
+      const src = askIcon('loot', c.getAttribute('data-lt'));
       if(src) c.insertBefore(pic('qa-chip-ic', src), c.firstChild);
     });
     function named(nm, ctx){
@@ -5237,6 +5248,11 @@ function titleKind(sub){
   out.addEventListener('click', function(e){
     const ic = e.target.closest && e.target.closest('.pt-icon[data-tap]');
     if(ic){ const nm = ic.parentNode && ic.parentNode.querySelector('.qa-chip, .ct-open, .pt-go'); if(nm){ e.preventDefault(); e.stopPropagation(); nm.click(); } return; }
+  }, true);
+  out.addEventListener('click', function(e){
+    const l = e.target.closest && e.target.closest('.qa-chip[data-lt]');
+    if(!l || typeof openLootItem !== 'function') return;
+    if(openLootItem(l.getAttribute('data-lb'), l.getAttribute('data-lt'))){ e.preventDefault(); e.stopPropagation(); }
   }, true);
   out.addEventListener('click', function(e){
     const g = e.target.closest && e.target.closest('.pt-go');
@@ -6094,7 +6110,7 @@ var LOOT=[];
 })();
 function spBoss(name){var n=norm(name);return bosses.filter(function(b){return b.type==='Special'&&norm(b.name)===n;})[0];}
 function lootFor(b){var n=norm(b.name);return LOOT.filter(function(L){return norm(L.boss)===n;});}
-function lootChip(L){return '<span class="qa-chip s7">'+qe(L.name)+'</span>';}
+function lootChip(L){return '<span class="qa-chip s7" data-lt="'+qe(L.name)+'" data-lb="'+qe(L.boss)+'">'+qe(L.name)+'</span>';}
 function lootBlock(b){
   var l=lootFor(b);if(!l.length)return '';
   return '<div class="qa-slot"><b>Loot</b><div class="qa-line">'+l.map(lootChip).join('')+'</div><div class="qa-line"><a href="#" class="qa-chip qa-boss" data-lootopen="'+qe(l[0].boss)+'">Open its Loot</a></div></div>';
@@ -8279,7 +8295,8 @@ var __qaOnlineBase=function(q,el){
   var unm=/I couldn.t match/.test(el.textContent);
   if(unm&&q&&q.trim()&&window.__qaStrat){
     var S=window.__qaStrat,fb=S.fallback(q),note='';
-    if(!fb){var cz=S.corrected(q);
+    var tin=null;try{tin=window.ASK&&window.ASK.termIn?window.ASK.termIn(q):null;}catch(x){tin=null;}
+    if(!fb&&!tin){var cz=S.corrected(q);
       if(cz){var inn=S.detect(cz.fixed,false),ah=null;
         if(!inn){ah=window.__qaAnswer?window.__qaAnswer(cz.fixed):'';if(!ah||/I couldn.t match/.test(ah))ah=null;}
         if(inn||ah){fb={html:inn?inn.html:ah,ctx:inn?inn.ctx:null};note='<div class="qa-note">Showing results for <b>'+esc(cz.name)+'</b>.</div>';}
@@ -9607,9 +9624,18 @@ window.openLoot=function(boss){
 document.getElementById('lootGrid').addEventListener('click',function(e){
   var c=e.target.closest('.lt-cell');if(!c||!cur)return;
   var it=cur[+c.dataset.i];if(!it)return;
+  showDesc(it);
+});
+window.openLootItem=function(boss,name){
+  var it=null;
+  [boss].concat(Object.keys(BOSS_LOOT)).some(function(k){it=(BOSS_LOOT[k]||[]).filter(function(x){return x&&x.name===name;})[0]||null;return !!it;});
+  if(!it)return false;
+  showDesc(it);return true;
+};
+function showDesc(it){
   document.getElementById('lootDescBody').innerHTML='<div class="ld-head"><img src="'+it.icon+'" alt=""><span>'+X(it.name)+'</span></div><div class="ld-cat">'+X(it.category)+'</div><p class="ld-main">'+X(it.desc).replace(/\[\[(.+?)\]\]/g,function(m,x){return (typeof SKILL_DETAILS!=='undefined'&&SKILL_DETAILS[x])?'<span class="cy" data-kind="skilltab" data-name="'+x+'" style="cursor:pointer">'+x+'</span>':'<span class="cy">'+x+'</span>';})+'</p><p class="ld-note">'+X(it.note)+'</p>';
   D.classList.add('open');lock();
-});
+}
 document.getElementById('lootClose').addEventListener('click',closeLoot);
 document.getElementById('lootDescClose').addEventListener('click',closeDesc);
 M.addEventListener('click',function(e){if(e.target===M)closeLoot();});
@@ -9649,6 +9675,7 @@ QA.show=function(html){out.innerHTML=html;try{out.scrollIntoView({block:'nearest
 QA.list=function(){return {handlers:H.map(function(h){return h.id;}),watchers:V.map(function(v){return v.id;})};};
 function dispatch(e){
   if(e.type==='click'){if(e.target!==go)return;}else if(e.key!=='Enter'||e.target!==inp)return;
+  if(!(e.isComposing&&e.type!=='click'))try{if(QA.settling)QA.settling();}catch(x){}
   for(var i=0;i<H.length;i++){var h=H[i];if(h.ime&&e.isComposing)continue;
     var r=false;try{r=h.fn(inp.value,e);}catch(x){try{console.error('QA handler '+h.id,x);}catch(y){}}
     if(r){e.stopImmediatePropagation();e.preventDefault();return;}}}
@@ -9963,20 +9990,20 @@ function looseMatch(q){if(typeof W.__qaKnown!=='function')return false;var A=TK(
   for(var i=0;i<A.words.length;i++){try{if(W.__qaKnown(A.words[i])||(out.querySelector('[data-doc]')&&/^(cards?|images?|pictures?|pics?|photos?|screenshots?|samples?|artwork|tooltips?|entry|entries|descriptions?|pages?|text|info|information|data|details?)$/.test(A.words[i])))return false;}catch(e){return false;}}return true;}
 var busy=false;
 function check(){if(busy||out.querySelector('[data-ft]'))return;
-  try{var rw=W.QA&&W.QA.state&&W.QA.state.core2&&W.QA.state.core2.rw;if(rw&&rw.raw===inp.value&&Date.now()-rw.at<4000)return;}catch(e){}
+  try{var rw=W.QA&&W.QA.state&&W.QA.state.core2&&W.QA.state.core2.rw;if(rw&&rw.raw===inp.value&&Date.now()-rw.at<4000){if(TK()){TK().T.ask='';TK().T.sub=null;}return;}}catch(e){}
   var q=(inp.value||'').trim()||String(QA.state.orig||'').trim();if(!q)return;
-  if(out.querySelector('[data-bare],[data-keep]'))return;
+  if(out.querySelector('[data-bare],[data-keep]')){if(TK()&&!out.querySelector('[data-mem]')){TK().T.ask='';TK().T.sub=null;}return;}
   if(!TK())return;var T=TK().T;
   var txt=out.textContent||'',menu=/Tell me a bit more/.test(txt)||/I couldn.t match/.test(txt),oc=null,loose=false;
   [].forEach.call(out.querySelectorAll('[data-intent] .qa-title'),function(t){if(/^Outside this guide/.test(t.textContent))oc=t.closest('[data-intent]');});
   var real=[].some.call(out.querySelectorAll('.qa-title'),function(t){return !/Tell me a bit more|Outside this guide|What I understood|I couldn.t match/.test(t.textContent);});
-  if(!menu&&!oc){if(!real||out.querySelector('[data-intent]')||out.querySelector('[data-aw]')){if(real)T.ask='';return;} if([].some.call(out.querySelectorAll('.qa-title'),function(t){return /^Built for/.test(t.textContent);})){T.ask='';return;}if(!looseMatch(q)){T.ask='';return;}loose=true;}
+  if(!menu&&!oc){if(!real||out.querySelector('[data-intent]')||out.querySelector('[data-aw]')){if(real){T.ask='';T.sub=null;}return;} if([].some.call(out.querySelectorAll('.qa-title'),function(t){return /^Built for/.test(t.textContent);})){T.ask='';return;}if(!looseMatch(q)){T.ask='';return;}loose=true;}
   else if(real)return;
   busy=true;
   try{var T=TK().T,r=TK().reply(q),box=D.createElement('div');box.innerHTML=r.html;var card=box.firstChild;
     if(oc&&oc.parentNode===out&&!menu&&!loose){out.replaceChild(card,oc);}
     else{var nodes=[].slice.call(out.childNodes),rest=D.createElement('details');rest.className='qa-more qa-fold'; if(!loose)rest.open=true;rest.innerHTML='<summary>'+(loose?'Other matches in the guide (may not be what you meant)':'From the guide')+'</summary>';nodes.forEach(function(n){rest.appendChild(n);});out.appendChild(card);out.appendChild(rest);}
-    T.turns.push({q:q,act:r.act,focus:r.focus,t:Date.now()});if(T.turns.length>8)T.turns.shift();T.n++;T.ask=r.ask||'';T.askAt=Date.now();
+    T.turns.push({q:q,act:r.act,focus:r.focus,topic:r.topic||'',t:Date.now()});if(T.turns.length>8)T.turns.shift();T.n++;T.ask=r.ask||'';T.askAt=Date.now();
     try{if(typeof QA.record==='function')QA.record({card:card,topic:r.focus||'your last message',why:(loose?'The Ask box matched something else that was probably not about what you said, so I replied in chat instead of showing it.':'The Ask box found no matching guide entry, so I replied in chat instead.')+' I read your message as: '+r.kind+'. I only used your own words'+(r.words&&r.words.length?' ('+r.words.slice(0,6).join(', ')+')':'')+(r.names&&r.names.length?' and the guide names I spotted ('+r.names.slice(0,4).join(', ')+')':'')+' and added no game facts.'});}catch(x){}
   }catch(e){try{console.error('free talk',e);}catch(x){}}
   setTimeout(function(){busy=false;},0);}
@@ -9986,7 +10013,7 @@ if(QA.first)QA.first('chat_social',function(q,e){
   try{if(!social(q))return false;}catch(x){return false;}
   if(e.type==='keydown'){if(e.isComposing||e.keyCode===229)return false;e.preventDefault();}
   try{var T=TK().T,r=TK().reply(q);QA.state.orig=q;W.__qaOrig=q;QA.show(r.html);
-    T.turns.push({q:q,act:r.act,focus:r.focus,t:Date.now()});if(T.turns.length>8)T.turns.shift();T.n++;T.ask=r.ask||'';T.askAt=Date.now();
+    T.turns.push({q:q,act:r.act,focus:r.focus,topic:r.topic||'',t:Date.now()});if(T.turns.length>8)T.turns.shift();T.n++;T.ask=r.ask||'';T.askAt=Date.now();
     var card=out.querySelector('[data-ft]');
     if(card&&typeof QA.record==='function')QA.record({card:card,topic:'your last message',why:'Your message was only a '+(r.kind||'greeting')+', so I replied in chat and showed nothing from the guide.'});
   }catch(x){try{console.error('chat social',x);}catch(y){}return false;}
@@ -9997,184 +10024,31 @@ Object.defineProperty(W.__qaTalk,'state',{get:function(){return TK()?TK().T:null
 <script>(function(){'use strict';
 var W=window,D=document,out=D.getElementById('qaOut');
 if(!out||!W.QA||typeof W.QA.watch!=='function'||W.__qaLex)return;
-var QA=W.QA;
+var QA=W.QA,WAIT=[];
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-var R=0;function pick(a){return a[R++%a.length];}
-var TOP=`food|food|food eat eating dinner lunch breakfast pizza burger pasta rice noodle ramen sushi cake cookie chocolate candy snack soup salad steak chicken cheese bread sandwich fries cook cooking recipe bake baking fruit apple banana coffee tea meal restaurant dessert|What is your favourite dish?|Do you cook it yourself or order it?
-family|family|family mom dad mother father brother sister parents parent grandma grandpa cousin uncle aunt kid kids baby child children son daughter wife husband|How is your family doing?|Is there a family tradition you like?
-social|friends and social life|friend friends buddy buddies party hangout dating crush boyfriend girlfriend partner relationship birthday wedding|How long have you known them?|What did you get up to together?
-work|work|job office career salary shift meeting coworker colleague manager interview resume deadline company business|How is work going lately?|What part of it takes the most out of you?
-school|school and study|school college university teacher homework exam study student lecture grade grades degree course essay assignment|What are you studying?|How are the deadlines looking?
-weather|the weather|weather rain rainy snow snowy sunny storm wind windy cloudy fog summer winter spring autumn season temperature humid|What is it like where you are?|Do you like that kind of weather?
-music|music|music song songs band singer guitar piano drum drums concert album playlist rap rock jazz pop melody lyrics violin|What have you been listening to?|Do you play anything yourself?
-screen|shows and movies|movie movies film series anime manga cartoon netflix episode actor cinema trailer sitcom drama youtube video videos streaming|What are you watching at the moment?|Would you recommend it?
-games|other games|minecraft fortnite zelda pokemon mario chess poker console playstation xbox nintendo steam esports gamer gaming roblox valorant skyrim|What do you like most about it?|Do you play it often?
-sports|sports and fitness|football soccer basketball baseball tennis golf gym workout swimming boxing hockey cricket sport sports fitness yoga|Do you play or just watch?|Who do you support?
-travel|travel|travel trip vacation holiday flight airport hotel beach mountain city country abroad passport camping hiking tour|Where is the trip?|What is the one thing you want to see?
-pets|pets and animals|dog dogs cat cats puppy kitten pet pets bird fish hamster rabbit horse animal animals zoo|What is its name?|How long have you had it?
-sleep|sleep|sleep nap bed dream dreams nightmare insomnia pillow|Are you getting enough rest?|Do you remember your dreams?
-health|health|doctor hospital medicine pain injury dentist diet healthy vitamin vitamins checkup|I hope it is nothing serious. How are you coping?|Have you been able to see someone about it?
-money|money|money rent bills price cheap expensive savings bank budget buying shopping sale broke debt paycheck wallet|Is it something you are saving for?|Was it worth the price?
-tech|tech|phone computer laptop internet wifi app apps software coding programming website keyboard battery charger tablet|What do you use it for?|Is it giving you trouble?
-books|books and writing|book books novel story stories reading author library poem poetry comic comics writing|What are you reading?|Who is your favourite author?
-art|art and making things|art draw drawing paint painting sketch design photo photography camera craft crafts sculpture|What do you like to make?|How long have you been at it?
-home|home|house home apartment room kitchen garden cleaning furniture neighbor neighbour|How is the place coming along?|What would you change about it?
-road|cars and the road|car cars bike bicycle train bus driving traffic motorcycle|Do you drive much?|Where are you headed?
-nature|nature, space and science|tree trees forest river ocean sea lake flower flowers moon sky space planet planets galaxy universe science physics chemistry maths biology history|What got you interested in it?|Do you read or watch much about it?`;
-var DEFTXT=`serendipity|finding something good by chance, without looking for it.
-ephemeral|lasting only a very short time.
-nostalgia|a wistful longing for the past.
-melancholy|a deep, lingering sadness, often with no clear cause.
-resilience|the ability to recover quickly from setbacks.
-procrastinate|to put off something you should be doing.
-paradox|a statement or situation that seems self-contradictory but may still be true.
-irony|an outcome opposite to what was expected, or words that mean the opposite of what is said.
-empathy|the ability to understand and share another person's feelings.
-sympathy|feeling sorrow for someone else's trouble.
-ambiguous|open to more than one meaning.
-ethics|principles about what is right and wrong.
-democracy|a system of government in which people choose their leaders by voting.
-inflation|a general rise in prices over time, so money buys less.
-recession|a significant decline in economic activity lasting months or more.
-budget|a plan for how much money you will earn and spend.
-mortgage|a loan used to buy property, secured by that property.
-interest|the cost of borrowing money, or what savings earn, as a percentage.
-tax|money people and businesses pay to a government.
-profit|money left after costs are taken from earnings.
-gravity|the force that pulls objects with mass toward each other, like things falling to Earth.
-photosynthesis|how plants use sunlight, water and carbon dioxide to make sugar and oxygen.
-evolution|gradual change in living things over generations through natural selection.
-algorithm|a step-by-step set of instructions for solving a problem.
-internet|a global network of connected computers that share information.
-wifi|wireless networking that connects devices to the internet.
-software|programs and data that tell a computer what to do.
-hardware|the physical parts of a computer.
-metaphor|describing one thing as another to suggest likeness, like "time is a thief".
-simile|a comparison using "like" or "as", like "brave as a lion".
-entropy|a measure of disorder; in physics it tends to increase in a closed system.
-atom|the basic unit of a chemical element.
-molecule|two or more atoms bonded together.
-cell|the basic unit of life; also a small room, as in a prison.
-dna|the molecule that carries genetic instructions in living things.
-vaccine|a medicine that trains the immune system to fight a specific disease.
-antibiotic|a medicine that kills or stops bacteria; it does not work on viruses.
-bacteria|single-celled microorganisms, some helpful and some harmful.
-virus|a tiny infectious agent that can only multiply inside living cells.
-oxygen|the gas in air that most living things need to breathe.
-volcano|an opening in the Earth's crust where molten rock, ash and gas can erupt.
-earthquake|shaking of the ground caused by movement of rock below the surface.
-tsunami|a huge ocean wave, usually caused by an underwater earthquake or landslide.
-hurricane|a large, powerful tropical storm with strong winds.
-tornado|a rotating column of air that touches the ground.
-galaxy|a huge system of stars, gas and dust held together by gravity.
-planet|a large body that orbits a star.
-comet|an icy body that grows a glowing tail near the Sun.
-asteroid|a rocky body orbiting the Sun, smaller than a planet.
-black hole|a region of space where gravity is so strong that not even light can escape.
-equator|the imaginary line around Earth halfway between the poles.
-continent|one of Earth's large landmasses.
-peninsula|land almost surrounded by water.
-island|land completely surrounded by water.
-glacier|a large, slow-moving mass of ice.
-ecosystem|a community of living things and the environment they interact with.
-climate|the typical weather of a region over many years.
-weather|the day-to-day state of the atmosphere, such as rain or sun.
-hobby|an activity you do for enjoyment in your free time.
-anxiety|worry or unease about something that might happen.
-meditation|training attention or calm, often by focusing on the breath.
-mindfulness|paying attention to the present moment without judging it.
-introvert|a person who gains energy from time alone.
-extrovert|a person who gains energy from being around others.
-optimist|someone who expects good outcomes.
-pessimist|someone who expects bad outcomes.
-coincidence|events that happen together by chance but seem connected.
-insomnia|trouble falling or staying asleep.
-hibernation|a long, sleep-like winter state some animals enter to save energy.
-caffeine|a stimulant found in coffee, tea and cocoa.
-protein|a nutrient the body needs to build and repair tissue.
-vitamin|a nutrient needed in small amounts to stay healthy.
-calorie|a unit of energy in food.
-recipe|a set of instructions for cooking a dish.
-vegetarian|someone who does not eat meat.
-vegan|someone who avoids all animal products.
-sushi|a Japanese dish of vinegared rice with fish, vegetables or egg.
-ramen|a Japanese noodle soup.
-jazz|a music style from African American communities, known for improvisation.
-symphony|a long piece of music for a full orchestra.
-orchestra|a large group of musicians playing together.
-novel|a long fictional story in book form.
-poetry|writing that uses rhythm and condensed language to express ideas and feelings.
-biography|a book about a real person's life.
-documentary|a film that presents real events or facts.
-anime|animation from Japan.
-manga|comics from Japan.
-marathon|a 42.195 km (26.2 mile) running race.
-passport|an official document that identifies you when travelling abroad.
-visa|official permission to enter or stay in a country.
-souvenir|an item kept as a reminder of a place or trip.
-philosophy|the study of basic questions about existence, knowledge and ethics.
-psychology|the study of the mind and behaviour.
-economics|the study of how people produce, trade and use resources.
-biology|the study of living things.
-chemistry|the study of matter and how substances change.
-physics|the study of matter, energy and forces.
-geometry|the branch of maths about shapes, sizes and space.
-algebra|the branch of maths that uses letters for unknown numbers.
-calculus|the branch of maths about change and accumulation.
-probability|how likely something is to happen, from 0 to 1.
-percentage|a number expressed as parts per hundred.
-average|the sum of values divided by how many there are.
-median|the middle value when numbers are sorted.
-prime number|a number greater than 1 divisible only by 1 and itself.
-pi|the ratio of a circle's circumference to its diameter, about 3.14159.
-quantum|the smallest discrete amount of something; quantum physics studies very small particles.
-robot|a machine that can carry out tasks automatically.
-encryption|scrambling data so only someone with the key can read it.
-password|a secret word or phrase used to prove your identity.
-bug|a small insect, or a mistake in software that makes it misbehave.
-cloud|a mass of water droplets in the sky; also computing services run on remote servers.
-ai|short for artificial intelligence: computer systems doing tasks that normally need human intelligence.`;
-var TOPICS=[],WT={},DEFS={};
-function vars(w){var o=[w];if(w.length>3){if(/ies$/.test(w))o.push(w.slice(0,-3)+'y');if(/es$/.test(w))o.push(w.slice(0,-2));if(/s$/.test(w))o.push(w.slice(0,-1));if(/ing$/.test(w)){o.push(w.slice(0,-3));o.push(w.slice(0,-3)+'e');}if(/ed$/.test(w)){o.push(w.slice(0,-2));o.push(w.slice(0,-1));}}return o;}
-function look(m,w){var v=vars(w);for(var i=0;i<v.length;i++)if(Object.prototype.hasOwnProperty.call(m,v[i]))return m[v[i]];return null;}
-function addW(t,s){String(s).split(' ').forEach(function(w){if(w)WT[w]=t;});}
-function addDefs(s){String(s).split('\n').forEach(function(l){var i=l.indexOf('|');if(i>0)DEFS[l.slice(0,i).trim().toLowerCase()]=l.slice(i+1).trim();});}
-TOP.split('\n').forEach(function(l){var p=l.split('|');if(p.length<5)return;var t={k:p[0],label:p[1],qs:[p[3],p[4]],n:0};TOPICS.push(t);addW(t,p[2]);});
-addDefs(DEFTXT);
-function topicOf(ws){var hit={},best=null,bn=0,word='';ws.forEach(function(w){var t=look(WT,w);if(t){hit[t.k]=(hit[t.k]||0)+1;if(hit[t.k]>bn){bn=hit[t.k];best=t;word=w;}}});return best?{t:best,w:word}:null;}
-var FN=false;
-function termOf(p){FN=false;var s=p.replace(/\s+(mean|means|meaning)$/,''),m=/^(what is the (meaning|definition) of|what do you mean by|what is|what are|what does|whats|define|definition of|meaning of|explain|tell me about)\s+/.exec(s);if(!m)return '';s=s.slice(m[0].length).replace(/^(an?|the)\s+/,'');if(m[1]==='what does'&&/\s+(do|does|work|works)$/.test(s)){FN=true;s=s.replace(/\s+(do|does|work|works)$/,'');}if(s.split(' ').length>3)return '';if(s.indexOf(' ')>0&&(POS.test(s)||NEG.test(s)))return '';return s;}
-function defOf(term){if(Object.prototype.hasOwnProperty.call(DEFS,term))return {k:term,d:DEFS[term]};var ws=term.split(' '),last=ws.pop(),v=vars(last);for(var i=1;i<v.length;i++){var k=ws.concat([v[i]]).join(' ');if(Object.prototype.hasOwnProperty.call(DEFS,k))return {k:k,d:DEFS[k]};}return null;}
-var POS=/\b(good|great|fun|amazing|awesome|nice|favou?rite|best|wonderful|cool|lovely|delicious|excellent)\b/,NEG=/\b(bad|awful|boring|terrible|annoying|worst|gross|horrible|disappointing|rough)\b/;
+function WD(){var t=W.ASK&&W.ASK.tools&&W.ASK.tools.words;if(t&&WAIT.length)WAIT.splice(0).forEach(function(a){t.addWords(a[0],a[1]);});return t||null;}
 function enhance(){
   var card=out.querySelector('[data-ft]');if(!card||card.getAttribute('data-lex'))return;
   var TK=QA.state.talk,tn=TK&&TK.turns&&TK.turns[TK.turns.length-1];if(!tn||!W.__qaTalk)return;
   card.setAttribute('data-lex','1');
-  if(!/^(statement|question|like)$/.test(tn.act))return;
-  var A=W.__qaTalk.analyse(tn.q);if(A.gameish||A.allNames.length)return;
-  var tp=topicOf(A.ws),L=[],ask='',info='',t,x,q;
-  var term=tn.act==='question'?termOf(A.plain):'',fn=FN,keepEx=false;
+  var w=WD();if(!w)return;
   var lines=[].filter.call(card.children,function(c){return c.classList.contains('qa-line');});
-  if(term){var d=defOf(term);
-    if(d){L=['<b>'+esc(d.k)+'</b>: '+esc(d.d),'<span style="opacity:.7">From my small offline word list (general English, not from the guide).</span>'];info='definition of '+d.k;}
-    else if(fn){return;}
-    else{keepEx=true;L=['I do not have <b>'+esc(term)+'</b> in my small offline word list'+(tp?', though it looks like it belongs with '+esc(tp.t.label)+'.':'.'),'I cannot look anything up online, so I will not guess a meaning.'];info='word not in list';}
-  }else if(tp){t=tp.t;x='<b>'+esc(tp.w)+'</b>';q=t.qs[t.n++%2];ask='tellmore';info='topic: '+t.label+' (word: '+tp.w+')';
-    var mood=POS.test(A.plain)?pick(['That sounds good.','Nice.']):NEG.test(A.plain)?pick(['That sounds rough.','Ugh, fair enough.']):'';
-    if(tn.act==='question')L=['Good question about '+x+'. I only hold Buriedbornes 2 data and a small word list, so I will not guess an answer.','Tell me your take, though. '+q];
-    else if(tn.act==='like')L=lines.slice(0,-1).map(function(n){return n.innerHTML;}).concat([q]);
-    else L=[(mood?mood+' ':'')+pick(['Ah, '+x+'. We are on the subject of '+t.label+'.','Okay, '+x+'. So this is about '+t.label+'.','Got it, '+x+'. That is '+t.label+' talk.']),q];
-    tn.topic=t.k;
-  }else return;
+  var P=null;try{if(/^(statement|question|like)$/.test(tn.act))P=w.plan(tn,W.__qaTalk.analyse(tn.q),lines.map(function(n){return n.innerHTML;}));}catch(e){if(W.ASK&&W.ASK.err)W.ASK.err('words: plan',e);}
+  if(!P)return;
+  if(P.topic)tn.topic=P.topic;
   var det=card.querySelector('details'),ex=card.querySelector('.qa-ex');
-  lines.forEach(function(n){card.removeChild(n);});if(ex&&!keepEx)card.removeChild(ex);
-  L.forEach(function(h){var d=D.createElement('div');d.className='qa-line';d.innerHTML=h;card.insertBefore(d,(keepEx&&ex)?ex:det);});
-  if(det){var f=D.createElement('div');f.className='qa-line';f.innerHTML='<span class="qa-lab">Offline word library</span> '+esc(info);det.appendChild(f);}
-  TK.ask=ask;TK.askAt=Date.now();
-  try{if(typeof QA.record==='function'){var dd=term?defOf(term):null,rt=dd?dd.k:(term?term:(tp?tp.w:'')),rw=dd?'I answered from my small offline word list: general English, not from the guide. The Ask box found nothing about it in the guide.':(term?'I looked for "'+term+'" in my small offline word list and the Ask box found nothing about it in the guide, so I did not guess a meaning.':'I matched the word "'+(tp?tp.w:'')+'" to the everyday topic "'+(tp?tp.t.label:'')+'" in my small offline word list and asked a follow-up. No game facts were used.');QA.record({card:card,topic:rt,why:rw});}}catch(x){}
+  lines.forEach(function(n){card.removeChild(n);});if(ex&&!P.keepEx)card.removeChild(ex);
+  P.L.forEach(function(h){var d=D.createElement('div');d.className='qa-line';d.innerHTML=h;card.insertBefore(d,(P.keepEx&&ex)?ex:det);});
+  if(det){var f=D.createElement('div');f.className='qa-line';f.innerHTML='<span class="qa-lab">Offline word library</span> '+esc(P.info);det.appendChild(f);}
+  TK.ask=P.ask;TK.askAt=Date.now();
+  try{if(typeof QA.record==='function')QA.record({card:card,topic:P.rec.topic,why:P.rec.why});}catch(x){}
 }
 QA.watch('word_library',enhance);
-W.__qaLex={addDefs:addDefs,addWords:function(k,s){for(var i=0;i<TOPICS.length;i++)if(TOPICS[i].k===k){addW(TOPICS[i],s);return true;}return false;},define:function(w){return defOf(String(w).toLowerCase());},topic:function(s){var r=topicOf(String(s).toLowerCase().split(/[^a-z0-9]+/));return r?{topic:r.t.k,word:r.w}:null;},follow:function(k){for(var i=0;i<TOPICS.length;i++)if(TOPICS[i].k===k)return {label:TOPICS[i].label,qs:TOPICS[i].qs.slice()};return null;},size:function(){return {topics:TOPICS.length,words:Object.keys(WT).length,definitions:Object.keys(DEFS).length};},version:1};
+function call(f,a,dflt){var w=WD();return w?w[f].apply(w,a):dflt;}
+W.__qaLex={addDefs:function(s){return call('addDefs',[s]);},
+  addWords:function(k,s){var w=WD();if(w)return w.addWords(k,s);WAIT.push([k,s]);return true;},
+  define:function(x){return call('define',[x],null);},topic:function(s){return call('topic',[s],null);},
+  follow:function(k){return call('follow',[k],null);},size:function(){return call('size',[],null);},version:1};
 })();</script>
 <script>(function(){'use strict';
 var W=window,D=document;
@@ -10193,9 +10067,8 @@ W.__qaCustom={reply:function(q){var r=TK()?TK().custom(q):null;return r?r.html:'
 })();</script>
 <script>(function(){'use strict';var W=window,QA=W.QA;if(!QA||typeof QA.watch!=='function'||QA.record)return;
 var out=QA.out||document.getElementById('qaOut'),REC=null;
-function clean(s,n){return String(s==null?'':s).replace(/\s+/g,' ').trim().slice(0,n);}
 function apply(){var A=QA.state&&QA.state.answer;if(!A||!REC)return;A.topic=REC.topic;A.name=REC.name;A.kind='chat';A.why=REC.why;}
-QA.record=function(o){if(!o)return;var t=clean(o.topic,60);if(!t)return;REC={topic:t,name:t,why:clean(o.why,440),card:o.card||null};apply();};
+QA.record=function(o){var Y=W.ASK&&W.ASK.tools&&W.ASK.tools.why,r=Y?Y.record(o):null;if(!r)return;REC={topic:r.topic,name:r.name,why:r.why,card:o.card||null};apply();};
 QA.watch('answer_record',function(){if(!REC||!REC.card||!out||!out.contains(REC.card))return;var A=QA.state.answer;if(A&&(A.topic!==REC.topic||A.kind!=='chat'||A.why!==REC.why))apply();});
 W.__qaRecord={version:1,last:function(){return REC?{topic:REC.topic,why:REC.why}:null;}};
 })();</script>
@@ -10203,41 +10076,17 @@ W.__qaRecord={version:1,last:function(){return REC?{topic:REC.topic,why:REC.why}
 var out=QA.out||document.getElementById('qaOut'),MINE='';
 if(!out)return;
 function T(el,n){return String(el&&el.textContent||'').replace(/\s+/g,' ').trim().slice(0,n||60);}
-var SMALL=/(\bguide|assistant)$|^(anything else|I only know|what I can and cannot)/i;
-function hint(l){var s=l.toLowerCase();
-  if(/^stat$/.test(s))return 'a stat entry';
-  if(/^term$/.test(s))return 'a term entry';
-  if(/\u2605\s*(weapon|armor|accessory|skill|rune)/.test(s))return 'an entry for that piece or skill';
-  if(/computed/.test(s))return 'a calculated result';
-  if(/estimate/.test(s))return 'partly an estimate, not all checked';
-  if(/verified/.test(s))return 'marked as checked rules';
-  if(/formula status/.test(s))return 'a note on whether the formula is known yet';
-  if(/skill data/.test(s))return 'taken from the skill data';
-  if(/^\d+ match/.test(s))return 'the closest matches I found';
-  return '';}
+function items(){var L=[],i,ch;
+  for(i=0;i<out.children.length;i++){ch=out.children[i];
+    if(ch.classList.contains('qa-note')){L.push({note:T(ch,90)});continue;}
+    if(!ch.classList.contains('qa-card')||ch.style.display==='none')continue;
+    var tt=ch.querySelector('.qa-title');
+    if(tt)L.push({sub:T(tt.querySelector('.qa-sub'),50),key:T(tt.firstChild,60),title:T(tt,60)});
+    else L.push({noteText:T(ch.querySelector('.qa-note'),120)});}
+  return L;}
 function build(){var A=QA.state.answer;if(!A||A.kind==='chat'||!A.topic)return undefined;
   if(out.querySelector('[data-bare],[data-aw]'))return undefined;
-  var cards=[],pre='',online=false,i,ch;
-  for(i=0;i<out.children.length;i++){ch=out.children[i];
-    if(ch.classList.contains('qa-note')){var nn=T(ch,90);if(!pre&&/^(Showing results for|Closest match|Understood as)/i.test(nn))pre=nn.replace(/[.\s]+$/,'');continue;}
-    if(!ch.classList.contains('qa-card')||ch.style.display==='none')continue;
-    var tt=ch.querySelector('.qa-title'),c=null;
-    if(tt){var sb=tt.querySelector('.qa-sub'),sl=T(sb,50),f=tt.firstChild,key=T(f,60);
-      if(/^online$/i.test(sl)){online=true;continue;}
-      if(SMALL.test(sl))return undefined;
-      if(/Tell me a bit more|Outside this guide/.test(T(tt)))return undefined;
-      c={key:key,t:sl?key.replace(/^Built for:\s*/,'the ')+(/^Built for:/.test(key)?' build':''):T(tt,60),l:sl};}
-    else{var nt=ch.querySelector('.qa-note'),nx=T(nt,120),k=nx.split(' \u00b7 ');
-      if(k.length<2||!/verified|estimate|rule|example|status/i.test(k.slice(1).join(' ')))continue;
-      c={key:k[0].replace(/[?!.\s]+$/,'').trim(),t:k[0].replace(/[?!.\s]+$/,'').trim(),l:k.slice(1).join(' \u00b7 ')};}
-    cards.push(c);}
-  if(!cards.length)return undefined;
-  var c0=cards[0];if(!(A.name===c0.key||A.topic===c0.key||(c0.key&&A.topic.indexOf(c0.key)===0)))return undefined;
-  var tail=(pre?' Before the card the page said \u201c'+pre+'\u201d.':'')+(online?' A \u201cSmart answer\u201d card from the online AI is also shown; that part is not read straight from the guide, so check it.':'');
-  var n=Math.min(3,cards.length),head='';
-  for(;n>=1;n--){var ps=cards.slice(0,n).map(function(x,j){var h=x.l?hint(x.l):'';return (cards.length>1?'Card '+(j+1)+': ':'')+x.t.slice(0,40)+(x.l?', labelled \u201c'+x.l.slice(0,50)+'\u201d'+(h?' ('+h+')':''):'');});
-    head='I answered from the guide\u2019s own cards. '+ps.join('; ')+'.';if(head.length+tail.length<=440)break;}
-  return (head+tail).slice(0,440);}
+  var Y=W.ASK&&W.ASK.tools&&W.ASK.tools.why;return Y?Y.reason(items(),A):undefined;}
 function refresh(){try{var A=QA.state.answer,w=build();if(typeof w==='string'&&A&&(A.why===''||A.why===MINE)){A.why=w;MINE=w;}}catch(x){try{console.error('QA answer_why',x);}catch(y){}}}
 try{new MutationObserver(refresh).observe(out,{childList:true,subtree:true});}catch(e){}
 W.__qaWhy={version:1,now:function(){return build();},last:function(){return MINE;}};
@@ -10702,20 +10551,24 @@ function exactNames(){if(EXN)return EXN;EXN={};
   try{JSON.parse(D.getElementById('qaKB').textContent).forEach(function(r){add(r[1],r[0]==='Skill'?'skill':r[0]==='Contract'?'contract':'other');});}catch(e){}
   if(typeof RUNE_DETAILS!=='undefined')Object.keys(RUNE_DETAILS).forEach(function(n){add(n,'rune');});
   if(typeof CONTRACT_DETAILS!=='undefined')Object.keys(CONTRACT_DETAILS).forEach(function(n){add(n,'contract');});
-  index().names.forEach(function(x){add(x.name,'other');});
+  index().names.forEach(function(x){add(x.name,'other');var e=EXN[N(x.name)];if(e){e.ot=e.ot||{};e.ot[x.kind]=1;}});
   return EXN;}
 var EXQ2=/^what (?:skills|runes|recipes|gear|equipment|items|parts|stuff) (?:does|do|can|will) (?:the\s+)?(.+?)(?:\s+(contract))?\s+(?:have|give|make|add|craft|unlock|contain)$/;
+function gearAbility(n){return Object.keys(ITEM_DETAILS).some(function(k){var d=ITEM_DETAILS[k];return (d.abilities||(d.ability?[d.ability]:[])).some(function(a){return a&&a.name===n;});});}
 function exactName(raw){
   var m2=EXQ2.exec(N(raw));
   if(m2){var e2=exactNames()[m2[1]];return e2&&e2.k.contract&&(m2[2]||!e2.k.other)?{kind:'contract',name:e2.k.contract}:null;}
   var m=EXQ.exec(N(raw));if(!m)return null;
   var e=exactNames()[m[1]];if(!e)return null;
   var want=m[2]||'',ks=Object.keys(e.k).filter(function(x){return x!=='other';});
+  if(!want&&e.k.other&&e.k.rune&&ks.length===1&&e.ot&&Object.keys(e.ot).every(function(k){return k==='term'||k==='status';})&&typeof TERMS!=='undefined'&&TERMS[e.k.rune]&&!gearAbility(e.k.rune))return {kind:'termrune',name:e.k.rune};
   if(want){if(!e.k[want])return null;ks=[want];}else if(e.k.other||ks.length!==1)return null;
   return {kind:ks[0],name:e.k[ks[0]]};}
 function exactCard(x){var h=null,S2=W.__qaStrat;
   if(x.kind==='skill'){var f=S2&&S2.facts?S2.facts(x.name):null;h=f&&f.html;}
   else if(x.kind==='rune'){var r=S2?S2.detect(x.name+' rune'):null;h=r&&r.kind==='rune'?r.html:null;}
+  else if(x.kind==='termrune'){var r2=S2?S2.detect(x.name+' rune'):null,T=TERMS[x.name];
+    h=card(E(x.name),'status',plain(T.description).split(/\n+/).map(function(l){return line(E(l));}).join('')+line('It is also a rune: see below.'),'name')+(r2&&r2.kind==='rune'?r2.html:'');}
   else h=contractCard(x.name);
   return h?markName(h):null;}
 var WHEREQ=/^(?:where (?:do|can|could|would|should) (?:i|you|we) (?:get|find|obtain|farm|buy|craft|learn)|where (?:to|can i) (?:get|find|obtain)|where (?:does|do|is|can) (?:the )?|how (?:do|can|could) (?:i|you) (?:get|obtain|unlock|find|learn|craft)|how to (?:get|obtain|unlock|find|learn|craft)|where does)\s+(?:the\s+|a\s+)?(.+?)(?:\s+skill)?(?:\s+(?:drop|drops|come from|from|obtained|found))?$/;
@@ -10802,8 +10655,53 @@ function calcCard(c){var st=skillText(c.key);if(!st)return null;
   h+=line('<i>Only the listed percent of your stats. Damage bonuses, the element, the target’s armor and resistances, crits and “power per” bonuses are not counted.</i>');
   h+='<div class="qa-ex"><button type="button" class="qa-exbtn" data-ex="'+E('Tell me about '+st.name)+'">What does '+E(st.name)+' do?</button></div>';
   return card(E(st.name),'damage from your stats · computed',h,'name');}
+var BOSSDROPQ=/^(?:what|which (?:items|gear|equipment|stuff|skills)) (?:do|does|can|will) (?:the )?(?:bosses|a boss|boss) (?:drop|give)$|^what drops from (?:the )?bosses$|^what (?:items|gear|stuff) (?:do|does) (?:the )?bosses (?:drop|have)$/;
+function bossDropCard(){var nD=typeof DATA!=='undefined'?DATA.length:0,nX=typeof CONQUEST!=='undefined'?CONQUEST.length:0,nC=typeof CONQUEST2!=='undefined'?CONQUEST2.length:0;
+  var b=function(l,q){return '<button type="button" class="qa-exbtn" data-ex="'+E(q)+'">'+E(l)+'</button>';};
+  var h=lead('Every boss has its own drop list of 6★ and 7★ equipment and skills. One enemy gives only one reward per kill.')+
+    line('The guide has '+nD+' dungeons, '+nX+' disasters and '+nC+' conquests. Ask about one boss ("What does Lindwurm drop?"), or start here:')+
+    '<div class="qa-ex">'+b('What does Lindwurm drop?','What does Lindwurm drop?')+b('Most 7★ items','Which dungeon drops the most 7 star items?')+b('Best place for 7★ skills','Which dungeon is best for 7 star skills?')+b('How many dungeons?','How many dungeons are there?')+'</div>'+
+    line('6★ and 7★ equipment and skills do not appear in rerolls unless you reach Savage mode in your dungeon run.');
+  return card('Boss drops','how the guide lists them',h,'name');}
+var LVLQ=/^(?:what is |whats |what s )?(?:the )?(?:max|maximum|highest|top) (?:player |character )?(?:level|lv)(?: in the game)?$|^(?:what is |whats |what s )?(?:the )?level cap$|^how high can (?:i|you) level(?: up)?$/;
+function levelCard(){var h=line('The guide does not list the normal level cap.')+
+    line('One thing it does say: the origin Ruination doubles the experience you gain, but lowers your maximum level to 80.')+
+    '<div class="qa-ex"><button type="button" class="qa-exbtn" data-ex="Tell me about Ruination">Tell me about Ruination</button></div>';
+  return card('Max level','what the guide says',h,'name');}
+var STC=null;
+function statusSkills(){if(STC)return STC;STC={};var kb=[];try{kb=JSON.parse(D.getElementById('qaKB').textContent);}catch(e){kb=[];}
+  var rows=kb.filter(function(r){return r[0]==='Skill';}).map(function(r){return {n:r[1],t:String(r[2]),st:+((/^\s*([1-7])★/.exec(String(r[2]))||[])[1]||0)};});
+  if(typeof SKILL_DETAILS!=='undefined')Object.keys(SKILL_DETAILS).forEach(function(n){if(!rows.some(function(r){return r.n===n;}))rows.push({n:n,t:plain(SKILL_DETAILS[n].description).replace(/\s+/g,' '),st:SKILL_DETAILS[n].stars||7});});
+  rows.forEach(function(r){
+    var parts=r.t.replace(/\s+/g,' ').replace(/(STRength|DEXterity|INTe\w*|PIEty)or /g,'$1 or ').split(/ \/ ([^\/]{2,40}) \/ (?=\[)/),seen={};
+    for(var i=0;i<parts.length;i+=2){var t=parts[i],mode=i?parts[i-1]:'',re=/Grant ([A-Z][A-Za-z]+(?: [A-Z][A-Za-z]+)?) to your opponent\.?\s*(\d+)% of your ((?:(?:STR|DEX|INT|PIE)[A-Za-z]*\s*(?:\+|or)\s*)*(?:STR|DEX|INT|PIE)[A-Za-z]*)/g,m;
+      while((m=re.exec(t))){var k=N(m[1]),key=k+'|'+mode+'|'+m[2]+'|'+m[3];if(seen[key])continue;seen[key]=1;
+        (STC[k]=STC[k]||{name:m[1],list:[]}).list.push({n:r.n,mode:mode,st:r.st,pct:+m[2],stats:(m[3].match(/(STR|DEX|INT|PIE)/g)||[]),or:/\bor\b/.test(m[3])});}}});
+  return STC;}
+function statusCalcAsk(raw){var t=N(raw),sk0=skillIn(t);if(!/\d/.test(t)||/\b(gear|items?|weapons?|armou?rs?|accessor(?:y|ies)|races?|jobs?|origins?|builds?)\b/.test(t))return null;
+  var v=statNums(t);if(!Object.keys(v).length)return null;var S3=statusSkills(),pad=' '+t+' ',hit=null;
+  Object.keys(S3).forEach(function(k){if(pad.indexOf(' '+k+' ')>=0&&(!hit||k.length>hit.length))hit=k;});
+  if(sk0&&sk0!==hit)return null;
+  return hit?{st:S3[hit],v:v}:null;}
+function statusCalcCard(c){var ab={STRength:'STR',DEXterity:'DEX',INTelligence:'INT',PIEty:'PIE'},v={};Object.keys(c.v).forEach(function(k){v[ab[k]]=c.v[k];});
+  var given=Object.keys(v).map(function(k){return k+' '+v[k];}).join(', ');
+  var L=c.st.list.filter(function(x){return x.stats.some(function(s){return s in v;});}).map(function(x){var u=x.stats.map(function(s){return v[s]||0;}),b=x.or?Math.max.apply(null,u):u.reduce(function(a,y){return a+y;},0);return {x:x,val:x.pct*b/100};});
+  L.sort(function(a,b){return b.val-a.val||a.x.n.localeCompare(b.x.n);});
+  var f=function(n){return (Math.round(n*100)/100).toLocaleString('en-US');},nm=c.st.name;
+  if(!L.length)return card(E(nm),'from your stats',line('No skill in the guide puts '+E(nm)+' on the enemy from '+E(given)+'.'),'name');
+  var h=lead(E(nm)+'’s strength comes from the skill that puts it on the enemy. With '+E(given)+':');
+  L.slice(0,8).forEach(function(o){var x=o.x;h+=line('<span class="item qa-chip s'+Math.max(1,Math.min(7,x.st||1))+'" data-item="'+E(x.n)+'" data-slot="skill">'+E(x.n)+'</span> '+(x.st?x.st+'★ ':'')+(x.mode?'(its '+E(x.mode)+' mode) ':'')+'· '+x.pct+'% of your '+x.stats.join(x.or?' or ':' + ')+' = <b>'+f(o.val)+'</b>');});
+  if(L.length>8)h+=line('+'+(L.length-8)+' more skills.');
+  h+=line('A choice (“or”) uses your highest stat; “+” adds them. Missing stats count as 0.');
+  h+=line('<i>That number is the '+E(nm)+' the skill puts on the target. The guide says the target takes damage at the start of each of its turns; exactly how much per turn is not certain.</i>');
+  return card(E(nm),'from your stats · the skills that cause it',h,'name');}
 var ABBR={wep:'weapon',weps:'weapons',wpn:'weapon',wpns:'weapons',acc:'accessory',accs:'accessories',accessorys:'accessories',accesory:'accessory',accesories:'accessories',accessorie:'accessory'};
-function shortForms(q){return String(q).replace(/\b([67]) ?\*/g,'$1 star').replace(/\b([67])-?(stars?)\b/gi,'$1 $2')
+var LOOTW=/\b(loot|loots|looted|looting|farm|farms|farmed|farming|grind|grinds|grinding)\b/gi,LOOTN=null;
+function lootNames(){if(LOOTN)return LOOTN;var a=[];try{if(typeof BOSS_LOOT!=='undefined')Object.keys(BOSS_LOOT).forEach(function(k){(BOSS_LOOT[k]||[]).forEach(function(it){var n=N(it&&it.name);if(n&&a.indexOf(n)<0)a.push(n);});});}catch(e){a=[];}LOOTN=a;return a;}
+function lootVerb(q){var s=String(q),n=' '+N(s)+' ',vi=n.search(/ (loot|loots|looted|looting|farm|farms|farmed|farming|grind|grinds|grinding) /);
+  if(vi<0||!lootNames().some(function(x){return n.indexOf(' '+x+' ',vi)>vi;}))return s;
+  return s.replace(LOOTW,'get');}
+function shortForms(q){return lootVerb(q).replace(/\b([67]) ?\*/g,'$1 star').replace(/\b([67])-?(stars?)\b/gi,'$1 $2')
   .replace(/[a-z]+/gi,function(w){var r=ABBR[w.toLowerCase()];return r||w;});}
 var KINDW={contract:'contract',contracts:'contract',race:'race',races:'race',job:'job',jobs:'job',class:'job',origin:'origin',origins:'origin',
   weapon:'weapon',weapons:'weapon',armor:'armor',armour:'armor',accessory:'accessory',accessories:'accessory',skill:'skill',skills:'skill',spell:'skill',
@@ -10911,6 +10809,10 @@ function plan(raw,prev,depth){
     var cr=null;try{cr=correction(raw,prev);}catch(e){cr=null;}
     if(cr)return {u:understand(raw),own:function(){return corrCard(cr);}};
     if(CHALQ.test(N(raw))&&W.ASK&&W.ASK.challenge){var chh=null;try{chh=W.ASK.challenge('next');}catch(e){chh=null;}if(chh)return {u:understand(raw),own:function(){return chh;}};}
+    if(BOSSDROPQ.test(N(raw))){var bdh=bossDropCard();return {u:understand(raw),own:function(){return bdh;}};}
+    if(LVLQ.test(N(raw))){var lvh=levelCard();return {u:understand(raw),own:function(){return lvh;}};}
+    var sca=null;try{sca=statusCalcAsk(raw);}catch(e){sca=null;}
+    if(sca){var scah=null;try{scah=statusCalcCard(sca);}catch(e){scah=null;}if(scah)return {u:understand(raw),own:function(){return scah;}};}
     var ca=null;try{ca=calcAsk(raw);}catch(e){ca=null;}
     if(ca){var cah=null;try{cah=calcCard(ca);}catch(e){cah=null;}if(cah)return {u:understand(raw),own:function(){return cah;}};}
     if(CTHOW.test(N(raw))){var cth=contractsHowCard();return {u:understand(raw),own:function(){return cth;}};}
@@ -10957,6 +10859,7 @@ function withRules(p,q){if(!p||(p.own&&!p.aug))return p;
 var inp=D.getElementById('qaInput');
 QA.pre.add('core2',1000,function(next){return function(raw){
   var real=!!(inp&&raw===inp.value),p;
+  if(real)settling();
   try{p=plan(raw,S.last);}catch(e){p={u:null};}
   var q=(p.rewrite&&p.direct)?p.rewrite:next(p.rewrite||raw);
   try{p=withRules(p,q);}catch(e){}
@@ -11035,7 +10938,10 @@ function wrongFold(){var c=S.last;if(!c||!inp||inp.value!==c.raw||S.wrongFor===c
   if(!out.querySelector('.qa-card')||out.querySelector('[data-wrong],[data-ft],[data-core2="fix"],[data-core2="unknown"],[data-share]'))return;
   var h='';try{h=W.ASK&&W.ASK.wrong?W.ASK.wrong(c.raw,c.shown||'',c.shownKind||''):'';}catch(e){h='';}
   if(h)out.insertAdjacentHTML('beforeend',h);}
-function settle(){try{addOn();}catch(e){}try{commit();}catch(e){}try{if(W.__qaPolish)W.__qaPolish(out);}catch(e){}try{wrongFold();}catch(e){}}
+function settling(){if(!out)return;out.classList.add('qa-settling');clearTimeout(S.rv);S.rv=setTimeout(shown,1500);}
+function shown(){clearTimeout(S.rv);if(out)out.classList.remove('qa-settling');}
+QA.settling=settling;
+function settle(){try{addOn();}catch(e){}try{commit();}catch(e){}try{if(W.__qaPolish)W.__qaPolish(out);}catch(e){}try{wrongFold();}catch(e){}shown();}
 if(out&&typeof MutationObserver!=='undefined')new MutationObserver(function(){clearTimeout(S.tm);S.tm=setTimeout(settle,160);}).observe(out,{childList:true,subtree:true});
 var OFF=W.__qaOff||[];
 OFF.forEach(function(id){try{QA.pre.remove(id);}catch(e){}});
@@ -11071,7 +10977,7 @@ var css='header.hdr-slim{display:flex;align-items:center;gap:8px;padding-top:6px
   'header.hdr-slim .tagline,header.hdr-slim #search,header.hdr-slim #advSearch,header.hdr-slim #skSearch,header.hdr-slim #advPanel,header.hdr-slim #skPanel,header.hdr-slim .count{display:none!important}'+
   'header.hdr-slim .toolbar{margin-top:0;flex:none;flex-wrap:nowrap}'+
   'header.hdr-slim .toolbar>:not(#sbToggle):not(#fitToggle){display:none!important}'+
-  '@media(min-width:601px){#qaChallenge{flex:0 0 auto!important}.qa{margin-left:0;padding-left:10px;padding-right:10px}'+
+  '@media(min-width:601px){#qaChallenge{flex:0 0 auto!important}.qa{margin-left:auto;margin-right:auto;padding-left:10px;padding-right:10px}'+
     '#calcBox #calcFields{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));column-gap:14px;align-items:end}'+
     '#calcBox .cr>button{flex:0 0 auto!important;padding:0 18px}}'+
   '@media(min-width:900px){header:not(.hdr-slim){display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:10px}'+
@@ -11108,24 +11014,32 @@ if(tog)tog.addEventListener('click',function(e){
   if(!hidden){e.stopImmediatePropagation();e.preventDefault();}
 },true);
 var MODALS=['lootModal','lootDesc','itemModal','subModal'];
+function gallery(bx){return !!bx.querySelector('.modal-images img')&&!bx.querySelector('.game-card');}
+function wholePics(bx){var im=bx.querySelectorAll('.modal-images img');if(!im.length)return;
+  var cs=W.getComputedStyle(bx),mh=parseFloat(bx.style.maxHeight)||parseFloat(cs.maxHeight)||bx.clientHeight;
+  var pad=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0),h3=bx.querySelector('h3');
+  var cap=Math.max(120,Math.floor(mh-pad-(h3?h3.offsetHeight+18:0)-6));
+  [].forEach.call(im,function(i){i.style.maxHeight=cap+'px';i.style.width='auto';i.style.maxWidth='100%';i.style.display='block';i.style.margin='0 auto';});}
 function fit(o){var sh=o&&o.querySelector('.modal-shell'),bx=o&&o.querySelector('.modal-box');if(!sh||!bx)return;
   sh.style.zoom='';bx.style.maxHeight='';o.classList.remove('fit-full');
-  var vw=W.innerWidth,vh=W.innerHeight;if(!o.classList.contains('open')||vw<=600)return;
-  var r=sh.getBoundingClientRect();if(!r.width||!r.height)return;
+  var gal=gallery(bx),done=function(){if(gal)wholePics(bx);};
+  var vw=W.innerWidth,vh=W.innerHeight;if(!o.classList.contains('open'))return;if(vw<=600)return done();
+  var r=sh.getBoundingClientRect();if(!r.width||!r.height)return done();
   var shrunk=!!(W.screen&&screen.width&&screen.width<vw*0.8),desc=o.id==='lootDesc';
+  if(!shrunk&&(bx.querySelector('.ct-list')||gal))return done();
   var z=Math.min((shrunk?0.94:0.72)*vw/r.width,shrunk?2.6:1.7);
   var room=desc?0.92*vh:vh-32,above=desc?0:112;
   var edge=shrunk&&(o.id==='itemModal'||desc);
   if(edge){o.classList.add('fit-full');r=sh.getBoundingClientRect();z=vw/r.width;}
   else if(bx.scrollHeight<=bx.clientHeight+2)z=Math.min(z,room/(r.height+above));
-  z=Math.floor(z*1000)/1000;if(z<1.03&&!edge)return;
+  z=Math.floor(z*1000)/1000;if(z<1.03&&!edge)return done();
   sh.style.zoom=String(z);
-  bx.style.maxHeight=Math.max(120,room/z-above)+'px';}
+  bx.style.maxHeight=Math.max(120,room/z-above)+'px';done();}
 function refit(o){(W.requestAnimationFrame||setTimeout)(function(){(W.requestAnimationFrame||setTimeout)(function(){fit(o);});});}
 if(typeof MutationObserver!=='undefined')MODALS.forEach(function(id){var o=D.getElementById(id);if(!o)return;
   var was=o.classList.contains('open'),tm=null;
-  new MutationObserver(function(){var now=o.classList.contains('open');if(now!==was){was=now;refit(o);}}).observe(o,{attributes:true,attributeFilter:['class']});
-  var box=o.querySelector('.modal-box');if(box)new MutationObserver(function(){if(!o.classList.contains('open'))return;clearTimeout(tm);tm=setTimeout(function(){refit(o);},60);}).observe(box,{childList:true,subtree:true});});
+  new MutationObserver(function(){var now=o.classList.contains('open');if(now!==was){was=now;fit(o);refit(o);}}).observe(o,{attributes:true,attributeFilter:['class']});
+  var box=o.querySelector('.modal-box');if(box)new MutationObserver(function(){if(!o.classList.contains('open'))return;fit(o);clearTimeout(tm);tm=setTimeout(function(){refit(o);},60);}).observe(box,{childList:true,subtree:true});});
 W.addEventListener('resize',function(){MODALS.forEach(function(id){var o=D.getElementById(id);if(o&&o.classList.contains('open'))refit(o);});});
 (function(){var ab=D.getElementById('askBox'),qi=D.getElementById('qaInput'),ttl=D.getElementById('qaTitle');if(!ab||!qi||!ttl)return;
   var full=false,pushed=false;
@@ -11366,9 +11280,10 @@ function show(ft,e,act,learned){
   if(!ft||out.querySelector('[data-ow="1"]')||out.querySelector('[data-core2]:not([data-core2="unknown"])'))return;
   if(e.kind!=='unsure')C.last={e:e,at:Date.now(),q:inp.value};
   var d=D.createElement('div');d.innerHTML=card(e,act,learned);var c=d.firstChild;
+  if(ft.hasAttribute('data-ans')&&ft.parentNode===out){out.insertBefore(c,ft.nextSibling);return;}
   out.insertBefore(c,out.firstChild);
   [].slice.call(ft.querySelectorAll(':scope > .qa-line')).forEach(function(l){if(DEADLINES.test(l.textContent))l.parentNode.removeChild(l);});}
-function wait(ft,term){var d=D.createElement('div');d.className='qa-note';d.setAttribute('data-owwait','1');d.textContent='Looking up "'+term+'" online…';out.insertBefore(d,out.firstChild);return d;}
+function wait(ft,term){var d=D.createElement('div');d.className='qa-note';d.setAttribute('data-owwait','1');d.textContent='Looking up "'+term+'" online…';out.insertBefore(d,(ft.hasAttribute('data-ans')&&ft.parentNode===out)?ft.nextSibling:out.firstChild);return d;}
 var C=(W.QA&&W.QA.state)?(W.QA.state.companion=W.QA.state.companion||{likes:[],last:null}):{likes:[],last:null};
 function noteLike(q){var m=/^i (?:really |kinda |also |just |do )?(love|like|enjoy|adore|hate|dislike|cant stand|can t stand) (?:a |an |the |to |playing |eating |watching )?(.+)$/.exec(clean(q));
   if(!m||m[2].split(' ').length>5)return;var thing=m[2].replace(/\b(so much|a lot|too|very much|lately|today|right now|anymore)\b/g,'').trim();if(!thing||BADFIRST.test(thing.split(' ')[0]))return;
@@ -11378,12 +11293,14 @@ function noteLike(q){var m=/^i (?:really |kinda |also |just |do )?(love|like|enj
 function likeLink(e){if(!e||!e.tp)return '';var hit=C.likes.filter(function(x){return x.pos&&x.tp===e.tp&&clean(x.thing)!==clean(e.w);})[0];
   var f=null;try{f=W.__qaLex&&W.__qaLex.follow?W.__qaLex.follow(e.tp):null;}catch(x){}
   return hit?'You told me you '+esc(hit.verb)+' '+esc(hit.thing)+', and this is '+esc(f?f.label:'the same kind of thing')+' too.':'';}
-function recall(ft){if(!C.likes.length)return false;
-  var s=C.likes.map(function(x){return 'you '+x.verb+' <b>'+esc(x.thing)+'</b>';});
+function told(){try{var t=W.ASK&&W.ASK.tools&&W.ASK.tools.words;return t&&t.told?t.told():[];}catch(e){return [];}}
+function recall(ft){var tl=told();if(!C.likes.length&&!tl.length)return false;
+  var s=C.likes.map(function(x){return 'you '+x.verb+' <b>'+esc(x.thing)+'</b>';}).concat(tl.map(function(x){return esc(x);}));
   var h='<div class="qa-title">What you told me<span class="qa-sub">this chat</span></div><div class="qa-lead">'+cap(s.length>1?s.slice(0,-1).join(', ')+' and '+s[s.length-1]:s[0])+'.</div>'+
     '<div class="qa-note">I only keep this while the page is open.</div>';
   var d=D.createElement('div');d.innerHTML='<div class="qa-card" data-ow="1" data-keep="1" data-mem="1">'+h+'</div>';out.insertBefore(d.firstChild,out.firstChild);
-  [].slice.call(ft.querySelectorAll(':scope > .qa-line')).forEach(function(l){if(DEADLINES.test(l.textContent))l.parentNode.removeChild(l);});return true;}
+  if(ft.parentNode)ft.parentNode.removeChild(ft);
+  [].forEach.call(out.querySelectorAll(':scope > details.qa-fold[open]'),function(x){x.open=false;});return true;}
 var PRON=/\b(he|she|him|her|his|hers|they|them|their|it|its)\b/;
 var SYN={die:'died death dead killed',died:'died death dead killed',death:'died death dead',born:'born birth',birth:'born birth',old:'born age',age:'born age',
   live:'lived lives living',lived:'lived lives',make:'made created developed',made:'made created developed',create:'created developed made',created:'created developed made',
@@ -11456,8 +11373,8 @@ function run(){
   ft.setAttribute('data-ow-done','1');
   var q=inp.value;
   try{noteLike(q);}catch(e){}
-  if(/\b(what do i (like|love|enjoy|hate)|do you remember (what|anything|me)|what did i (say|tell you)|what have i told you)\b/.test(clean(q))){if(recall(ft))return;}
-  try{if(follow(ft,q))return;}catch(e){}
+  if(/\b(what do i (like|love|enjoy|hate)|do you remember (what|anything|me|my)|what did i (say|tell you)|what have i told you|(what is|whats) my favou?rite)\b/.test(clean(q))){if(recall(ft))return;}
+  if(!ft.hasAttribute('data-ans'))try{if(follow(ft,q))return;}catch(e){}
   var p=parse(q);if(!p.term||p.term.length<3)return;
   if(guideWhole(p.name))return;
   var net=!(W.__qaNoNet||isOff()||navigator.onLine===false||typeof fetch!=='function'),asked=p.act==='what'||p.act==='who'||p.act==='plain';
@@ -11497,102 +11414,10 @@ W.__qaWords={followFor:followFor,last:function(){return C.last;},parse:parse,loo
 var W=window,D=document,out=D.getElementById('qaOut');
 if(!out||W.__qaSay)return;
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
-function N(s){return String(s||'').toLowerCase().replace(/[‘’']/g,'').replace(/[^a-z0-9]+/g,' ').trim();}
-function L(s){return String(s||'').split(',').map(function(x){return x.trim();}).filter(function(x){return x&&x!=='—';});}
-function list(a){a=a.map(function(x){return '<b>'+esc(x)+'</b>';});return a.length<2?a.join(''):a.slice(0,-1).join(', ')+' and '+a[a.length-1];}
-function plural(n,w,ws){return n+' '+(n===1?w:(ws||w+'s'));}
-var SLOTS=['weapon','armor','accessory','skill'];
-var G=null;
-function data(){if(G)return G;G={places:[],items:{},kb:[]};
-  [['Dungeon',typeof DATA!=='undefined'?DATA:[]],['Disaster',typeof CONQUEST!=='undefined'?CONQUEST:[]],['Conquest',typeof CONQUEST2!=='undefined'?CONQUEST2:[]],['Special',typeof SPECIAL!=='undefined'?SPECIAL:[]]].forEach(function(g){
-    g[1].forEach(function(r){var p={name:r[0],type:g[0],cells:{}};G.places.push(p);
-      SLOTS.forEach(function(s,i){p.cells[s]=[L(r[1+i*2]),L(r[2+i*2])];
-        [0,1].forEach(function(k){p.cells[s][k].forEach(function(n){var key=n+'|'+s,it=G.items[key]||(G.items[key]={name:n,slot:s,at:[]});it.at.push({p:p,star:k?7:6});});});});});});
-  try{G.kb=JSON.parse(D.getElementById('qaKB').textContent);}catch(e){}
-  return G;}
-function bossesOf(it){var seen={},o=[];it.at.forEach(function(a){if(a.p.type!=='Special'&&!seen[a.p.name]){seen[a.p.name]=1;o.push(a.p);}});return o;}
-function detail(name){if(typeof ITEM_DETAILS==='undefined')return null;return ITEM_DETAILS[name]||ITEM_DETAILS[name+'::weapon']||ITEM_DETAILS[name+'::armor']||ITEM_DETAILS[name+'::accessory']||null;}
-function lineNames(name){var d=detail(name);if(!d)return [];return (d.abilities||(d.ability?[d.ability]:[])).map(function(a){return a.name;}).concat((d.stats||[]).map(function(s){return s.name;}));}
-function pick(name,a){var h=0,s=String(name);for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%9973;return a[h%a.length];}
-var TYPEL={Dungeon:'dungeon',Disaster:'disaster',Conquest:'conquest'};
-function sayItem(name,slot,star){var g=data(),it=g.items[name+'|'+slot];
-  var what=star+'★ '+(slot==='armor'?'armor piece':slot);
-  if(!it)return null;
-  var bs=bossesOf(it),sp=it.at.some(function(a){return a.p.type==='Special';});
-  if(!bs.length)return sp?'<b>'+esc(name)+'</b> is a '+what+' that no boss drops: the guide only lists it under the special dungeons.':null;
-  var by={Dungeon:[],Disaster:[],Conquest:[]};bs.forEach(function(p){by[p.type].push(p.name);});
-  var parts=['Dungeon','Disaster','Conquest'].filter(function(t){return by[t].length;}).map(function(t){return plural(by[t].length,TYPEL[t])+(by[t].length<=2?' ('+by[t].join(', ')+')':'');});
-  var s='<b>'+esc(name)+'</b> is a '+what+' on '+plural(bs.length,'boss list')+': '+(parts.length>1?parts.slice(0,-1).join(', ')+' and '+parts[parts.length-1]:parts[0])+'.';
-  var peers=Object.keys(g.items).map(function(k){return g.items[k];}).filter(function(x){return x.slot===slot&&x.at.some(function(a){return a.star===star&&a.p.type!=='Special';});}).map(function(x){return bossesOf(x).length;});
-  if(peers.length>4){var mn=Math.min.apply(null,peers),mx=Math.max.apply(null,peers),avg=peers.reduce(function(a,b){return a+b;},0)/peers.length,n=bs.length,av=Math.round(avg);
-    var one=star+'★ '+{weapon:'weapon',armor:'armor piece',accessory:'accessory',skill:'skill'}[slot],w=star+'★ '+{weapon:'weapons',armor:'armor pieces',accessory:'accessories',skill:'skills'}[slot];
-    if(n===mn)s+=' No other '+one+' is on fewer lists, so fewer bosses can give it to you.';
-    else if(n===mx)s+=' No other '+one+' is on more lists.';
-    else if(n<=avg*0.6)s+=' That is fewer than most '+w+', which are on about '+av+'.';
-    else if(n>=avg*1.4)s+=' That is more than most '+w+', which are on about '+av+'.';
-    else s+=' That is about usual for '+w+' (about '+av+' each).';}
-  return s;}
-function saySkill(name,card){var t=card.innerText||'',m=/Uses\s+max\s+(\d+)\s+uses?,\s+each cast uses\s+(\d+)/i.exec(t),c=/Cooldown\s+(\d+)\s+turns?/i.exec(t),s='';
-  if(c&&+c[1]>=99)c=null;
-  if(m&&+m[2]>0&&+m[2]<=+m[1]&&+m[2]<99){var casts=Math.floor(+m[1]/+m[2]);s='With '+m[1]+' uses and '+m[2]+' per cast, <b>'+esc(name)+'</b> gives you '+plural(casts,'cast')+' before it runs out';}
-  if(c)s+=(s?', and after each one':'After each use, <b>'+esc(name)+'</b>')+' it needs '+plural(+c[1],'turn')+' to cool down';
-  if(s)s+='.';
-  var g=data(),it=g.items[name+'|skill'];if(it){var bs=bossesOf(it);if(bs.length)s+=(s?' It is on ':'<b>'+esc(name)+'</b> is on ')+plural(bs.length,'boss list')+' in the guide.';}
-  return s||null;}
-function sayPlace(name){var g=data(),p=g.places.filter(function(x){return x.name===name;})[0];if(!p)return null;
-  var n6=0,n7=0,s7=[];SLOTS.forEach(function(s){n6+=p.cells[s][0].length;n7+=p.cells[s][1].length;s7=s7.concat(p.cells[s][1]);});
-  if(p.type==='Special'&&(/crystal beach/i.test(name)||(!n6&&!n7)))return '<b>'+esc(name)+'</b> does not drop 6★ or 7★ gear or skill books; its rare items are in its Loot instead.';
-  var s='<b>'+esc(name)+'</b> is '+(p.type==='Special'?'a special dungeon whose table lists':'a '+TYPEL[p.type]+' boss with')+' '+n6+' items at 6★ and '+n7+' at 7★.';
-  if(p.type!=='Special'&&s7.length&&s7.length<=4)s+=' Its 7★ pieces are '+list(s7)+'.';
-  if(p.type!=='Special'){var only=[];SLOTS.forEach(function(sl){p.cells[sl][0].concat(p.cells[sl][1]).forEach(function(n){var it=g.items[n+'|'+sl];if(it&&bossesOf(it).length===1&&only.indexOf(n)<0)only.push(n);});});
-    if(only.length===1)s+=' One of its items drops at no other boss: '+list(only)+'.';
-    else if(only.length)s+=' '+only.length+' of its items drop at no other boss: '+list(only.slice(0,4))+(only.length>4?' and more':'')+'.';
-    else s+=' Everything it drops can also be found at other bosses.';}
-  return s;}
-function gearWith(test){var o=[],seen={};if(typeof ITEM_DETAILS==='undefined')return o;
-  Object.keys(ITEM_DETAILS).forEach(function(k){var nm=k.replace(/::(weapon|armor|accessory|skill)$/,'');if(seen[nm])return;
-    if(lineNames(nm).some(test)){seen[nm]=1;o.push(nm);}});return o;}
-function star7(nm){var g=data();return SLOTS.some(function(s){var it=g.items[nm+'|'+s];return it&&it.at.some(function(a){return a.star===7;});});}
-function sayStat(name){var st=typeof STATS!=='undefined'&&STATS[name];if(!st)return null;var w=N(name);
-  var gear=gearWith(function(l){return N(l)===w||String(l).split('+').some(function(x){return N(x)===w;});}),k7=gear.filter(star7).length;
-  var mx=/upper limit probability (\d+)%|Max:\s*\+?(\d+)%/i.exec(st.description||'');
-  var s='<b>'+esc(name)+'</b> is a stat you get from gear'+(gear.length?': '+plural(gear.length,'piece')+' in the guide '+(gear.length===1?'carries':'carry')+' it'+(k7?', '+k7+' of them at 7★':''):'')+'.';
-  if(mx)s+=' It tops out at '+(mx[1]||mx[2])+'%.';
-  return s;}
-function plainD(s){return String(s||'').replace(/\{\{([^}|]+)(?:\|([^}|]+))?[^}]*\}\}/g,function(m,a,b){return b||a;}).replace(/\[\[|\]\]|%%|~~|@@|\^\^|\$\$|##/g,'').replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim();}
-function sayTerm(name){var t=typeof TERMS!=='undefined'&&TERMS[name];if(!t)return null;var d=plainD(t.description);
-  var m=/^(\w+) Damage over Time\.?$/i.exec(d),s='';
-  if(m)s='<b>'+esc(name)+'</b> hurts a little every turn instead of all at once, and that damage counts as '+m[1].toLowerCase()+'.';
-  var re=new RegExp('(^|[^a-z])'+name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'([^a-z]|$)','i'),gear=gearWith(function(l){return re.test(l);});
-  if(gear.length)s+=(s?' ':'<b>'+esc(name)+'</b> shows up on gear: ')+plural(gear.length,'piece')+' in the guide '+(gear.length===1?'mentions it in its effects':'mention it in their effects')+(gear.length<=3?' ('+gear.join(', ')+')':', for example '+gear.slice(0,2).join(' and '))+'.';
-  return s||null;}
-function kbRow(kind,name){var g=data(),K={contract:'Contract',race:'Race',job:'Job',origin:'Origin'}[kind];return g.kb.filter(function(e){return e[0]===K&&N(e[1])===N(name);})[0]||null;}
-function sayContract(name){var e=kbRow('contract',name);if(!e)return null;var p=String(e[2]).split(' | '),rar=(p[0]||'').trim(),loc=(p[3]||'').trim(),cont=(p[1]||'').trim();
-  var m=/^(Runes|Skills|Skill|Equipment Parts|Equipment):\s*(.+)$/.exec(cont),s='<b>'+esc(name)+'</b> is a '+esc(rar)+' contract'+(loc?' you get from '+esc(loc):'')+'.';
-  if(m){var body=m[2],ex=/\s+(Rune Slot Release.*|Enhanced \w+ Reroll \+\d+|Remove Equipment Abilities|Willpower.*)$/.exec(body),main=ex?body.slice(0,ex.index):body;
-    var n=main.split(',').filter(function(x){return x.trim();}).length,kind={Runes:'rune',Skills:'skill',Skill:'skill','Equipment Parts':'equipment part',Equipment:'equipment'}[m[1]];
-    s+=' Equipped at the start of a run, it adds '+plural(n,kind+' recipe')+(ex?', plus '+esc(ex[1].replace(/\s+\d★$/,''))+'.':'.');}
-  return s;}
-function stats(e){var f=/(?:^|; )Stats: ([^;]+)/.exec(e[2])||/^Stats: ([^;]+)/.exec(e[2]),o={};if(!f)return o;f[1].replace(/\b(STR|DEX|INT|PIE|HP) (\d+)/g,function(_,k,v){o[k]=+v;});return o;}
-function sayKind(kind,name){var e=kbRow(kind,name);if(!e)return null;var st=stats(e),keys=['STR','DEX','INT','PIE'].filter(function(k){return st.hasOwnProperty(k);});if(!keys.length)return null;
-  var mx=Math.max.apply(null,keys.map(function(k){return st[k];})),top=keys.filter(function(k){return st[k]===mx;});
-  var s='<b>'+esc(name)+'</b> is a '+kind+' whose best starting '+(top.length>1?'stats are ':'stat is ')+top.join(' and ')+' ('+mx+(top.length>1?' each':'')+').';
-  var all=data().kb.filter(function(x){return x[0]===e[0];}).map(stats),best=[];
-  keys.forEach(function(k){var vals=all.map(function(o){return o[k]||0;});if(st[k]>0&&st[k]===Math.max.apply(null,vals)&&vals.filter(function(v){return v===st[k];}).length===1)best.push(k);});
-  if(best.length)s+=' No other '+kind+' starts with more '+best.join(' or ')+'.';
-  return s;}
 function ttl(c){var t=c.querySelector(':scope > .qa-title');if(!t)return '';return [].filter.call(t.childNodes,function(n){return !(n.classList&&n.classList.contains('qa-sub'));}).map(function(n){return n.textContent;}).join('').trim();}
-function sayFor(c){var t=ttl(c),sb=c.querySelector(':scope > .qa-title .qa-sub'),k=sb?sb.textContent.trim().toLowerCase():'',m;
-  if(!t)return null;
-  if((m=/^([67])★ (weapon|armor|accessory)$/.exec(k)))return sayItem(t,m[2],+m[1]);
-  if((m=/^([67])★ skill$/.exec(k))&&/Drops from \d+ boss/.test(c.innerText||''))return sayItem(t,'skill',+m[1]);
-  if(/^(\d★ )?skill$/.test(k))return saySkill(t,c);
-  if(/^(dungeon|disaster|conquest|special dungeon)$/.test(k))return sayPlace(t);
-  if(k==='stat')return sayStat(t);
-  if(k==='term')return sayTerm(t);
-  if(k==='contract')return sayContract(t);
-  if(/^(race|job|origin)$/.test(k))return sayKind(k,t);
-  return null;}
+function sayFor(c){var S=W.ASK&&W.ASK.tools&&W.ASK.tools.say;if(!S)return null;
+  var sb=c.querySelector(':scope > .qa-title .qa-sub'),k=sb?sb.textContent:'';
+  return S.line({title:ttl(c),kind:k,text:/skill\s*$/i.test(k)?(c.innerText||''):''});}
 function run(){
   if(out.querySelector('[data-ft],[data-say]'))return;
   var cards=[].filter.call(out.children,function(c){return c.classList&&c.classList.contains('qa-card')&&c.getClientRects().length&&!c.hasAttribute('data-ow');}).slice(0,2);
@@ -11640,6 +11465,7 @@ W.__qaSay={card:function(c){ return sayFor(c);},line:function(kind,name){var c=D
     var F = {places: [], items: [], kb: [], loot: [], terms: Object.keys(src.TERMS || {}), stats: Object.keys(src.STATS || {}), vocab: {},
       abilities: [], status: [], roster: [], tested: {}, details: [], statDefs: src.STATS || {}, skillRows: []};
     var ID = src.ITEM_DETAILS || {}, SD = src.SKILL_DETAILS || {}, byKey = {};
+    F.itemDefs = ID; F.termDefs = src.TERMS || {};
     TABLES.forEach(function (t) {
       (src[t[1]] || []).forEach(function (r) {
         var p = {kind: 'place', type: t[0], name: r[0], cells: {}, loot: []};
@@ -12045,14 +11871,17 @@ W.__qaSay={card:function(c){ return sayFor(c);},line:function(kind,name){var c=D
   function cleanNum(t) { return ' ' + String(t || '').toLowerCase().replace(/\.(?!\d)/g, ' ').replace(/([^\d])\./g, '$1 ').replace(/[^a-z0-9.%+\u2605-]+/g, ' ').replace(/\s+/g, ' ').trim() + ' '; }
   function cleanTalk(t) { return ' ' + String(t || '').toLowerCase().replace(/[\u2018\u2019']/g, '').replace(/[^a-z0-9]+/g, ' ').trim() + ' '; }
   function cleanTerm(q) { return String(q == null ? '' : q).toLowerCase().replace(/[\u2018\u2019`]/g, "'").replace(/[\u201c\u201d"]/g, '').replace(/armour/g, 'armor').replace(/[-_]+/g, ' ').replace(/[()\[\]]+/g, ' ').replace(/\s+/g, ' ').replace(/[\s?!.,;:]+$/, '').replace(/^\s+/, ''); }
-  function edits(a, b, max) {
+  var KROWS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'], KPOS = {};
+  KROWS.forEach(function (r, y) { for (var i = 0; i < r.length; i++) KPOS[r[i]] = [i + [0, 0.25, 0.75][y], y]; });
+  function nearKey(x, y) { var a = KPOS[x], b = KPOS[y]; return !!(a && b && Math.abs(a[1] - b[1]) <= 1 && Math.abs(a[0] - b[0]) <= 1); }
+  function edits(a, b, max, keys) {
     if (Math.abs(a.length - b.length) > max) return max + 1;
     var p2 = null, p = [], i, j;
     for (j = 0; j <= b.length; j++) p[j] = j;
     for (i = 1; i <= a.length; i++) {
       var c = [i], low = i;
       for (j = 1; j <= b.length; j++) {
-        var v = Math.min(p[j] + 1, c[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        var v = Math.min(p[j] + 1, c[j - 1] + 1, p[j - 1] + (a[i - 1] === b[j - 1] ? 0 : keys && !nearKey(a[i - 1], b[j - 1]) ? 2 : 1));
         if (p2 && i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, p2[j - 2] + 1);
         c[j] = v; if (v < low) low = v;
       }
@@ -12199,7 +12028,23 @@ W.__qaSay={card:function(c){ return sayFor(c);},line:function(kind,name){var c=D
     R.other = R.other.slice(0, 3);
     return R;
   }
-  ASK.reader = {read: read, clean: clean, cleanNum: cleanNum, cleanTerm: cleanTerm, cleanTalk: cleanTalk, edits: edits, index: index, QW: QW};
+  function fixWords(text, lists, known) {
+    var ch = [], near = [];
+    var out = String(text).split(' ').map(function (t, i, all) {
+      if (t.length < 3 || /[^a-z]/.test(t) || known(t, i, all)) return t;
+      var max = t.length >= 6 ? 2 : 1, win = null;
+      lists.forEach(function (K) {
+        var best = null, bd = max + 1, tie = false;
+        K.forEach(function (k) { if (Math.abs(k.length - t.length) > max) return; var d = edits(t, k, max, true); if (d < bd) { bd = d; best = k; tie = false; } else if (d === bd && k !== best) tie = true; });
+        if (best && bd <= max && (!win || bd < win.d)) win = {w: best, d: bd, tie: tie};
+      });
+      if (win) near.push(t);
+      if (win && !win.tie) { ch.push([t, win.w]); return win.w; }
+      return t;
+    });
+    return {text: out.join(' '), ch: ch, near: near};
+  }
+  ASK.reader = {fixWords: fixWords, read: read, clean: clean, cleanNum: cleanNum, cleanTerm: cleanTerm, cleanTalk: cleanTalk, edits: edits, index: index, QW: QW};
 })(typeof window !== 'undefined' ? (window.ASK = window.ASK || {}) : module.exports);</script>
 <script>(function (ASK) {
   'use strict';
@@ -12227,7 +12072,7 @@ W.__qaSay={card:function(c){ return sayFor(c);},line:function(kind,name){var c=D
     return {one: its[0] || pls[0] || roster || cds[0] || sts[0] || null, pair: its.length >= 2 ? [its[0].name, its[1].name] : pls.length >= 2 ? [pls[0].name, pls[1].name] : null,
       pairItems: its.length >= 2, place: pls[0] || null, build: !!L.build};
   }
-  M.remember = function (c) { M.last = c; };
+  M.remember = function (c) { if (M.last && c && M.last.q !== c.q) M.prev = M.last; M.last = c; };
   M.resolve = function (raw, F) {
     var L = M.last; if (!L || !L.q) return null;
     var R = ASK.reader.read(raw, F), t = R.t, S0 = subject(L, F);
@@ -12235,6 +12080,13 @@ W.__qaSay={card:function(c){ return sayFor(c);},line:function(kind,name){var c=D
     if (/\b(is|was|are|be) it (possible|allowed|necessary|required|true|legal|needed)\b|\bdoes(?:nt| not)? it matter\b/.test(t)) return null;
     if (BETTERW.test(t) && S0.pair && S0.pairItems) return {better: S0.pair};
     if ((CMPW.test(t) || BETTERW.test(t)) && S0.pair) return {q: 'compare ' + S0.pair[0] + ' and ' + S0.pair[1], direct: 1};
+    if (BETTERW.test(t) && !S0.pair && S0.one && M.prev && M.prev.q) {
+      var P0 = subject(M.prev, F);
+      if (P0.one && P0.one.name !== S0.one.name && P0.one.kind === S0.one.kind) {
+        if (S0.one.kind === 'item') return {better: [P0.one.name, S0.one.name]};
+        return {q: 'compare ' + P0.one.name + ' and ' + S0.one.name, direct: 1};
+      }
+    }
     var pl1 = own.filter(function (x) { return x.kind === 'place'; });
     if (/\belse\b/.test(t) && own.length === 1 && pl1.length === 1 && S0.one && S0.one.kind === 'item' && (L.places || []).indexOf(pl1[0].name) >= 0) return {q: raw, direct: 1, except: [S0.one.name]};
     if (own.length === 1 && S0.one && own[0].name !== S0.one.name && /\b(it|that one|this one)\b/i.test(raw) && /\b(compare|vs|versus|against|differ\w*|better|or)\b/.test(t))
@@ -12510,7 +12362,7 @@ W.__qaSay={card:function(c){ return sayFor(c);},line:function(kind,name){var c=D
   }
   function lootBlocks(p) {
     if (!p.loot.length) return [];
-    return [{slot: 'Loot', body: [{line: p.loot.map(function (l) { return {loot: l.name}; })}, {line: [{lootopen: p.name}]}]}];
+    return [{slot: 'Loot', body: [{line: p.loot.map(function (l) { return {loot: l.name, from: p.name}; })}, {line: [{lootopen: p.name}]}]}];
   }
   function placeCard(p, R) {
     var B = [], sub = p.type === 'Special' ? 'special dungeon' : p.type.toLowerCase();
@@ -13201,7 +13053,22 @@ W.__qaSay={card:function(c){ return sayFor(c);},line:function(kind,name){var c=D
     var body = [line(B('STR ' + res.STR + ' · DEX ' + res.DEX + ' · INT ' + res.INT + ' · PIE ' + res.PIE)), line(B('HP ' + fmt(tot.hp) + ' · HP Stacks ' + fmt(tot.stacks) + ' · Shield ' + fmt(tot.shield)))];
     if (otherTxt) body.push(line('Other stats: ' + otherTxt));
     body.push(line(['This is race + job + origin ', B('before gear'), ': equipped gear adds on top and I do not guess it' + (missing.length ? '; no ' + missing.join(' / ') + ' was named, so it is not counted' : '') + '.']), badgeLine(st));
-    return card(names.join(' · '), 'starting stats at Lv 1 · ' + labelOf(st), body, [['Try another combination', 'Elf Ninja Noble starting stats']]);
+    return card(names.join(' · '), 'starting stats at Lv 1 · ' + labelOf(st), body, [['Try another combination', another(by) + ' starting stats']]);
+  }
+  var NEXT = 0;
+  function another(by) {
+    if (!KBM) kbBuild();
+    var L = {Race: [], Job: [], Origin: []};
+    F.roster.forEach(function (r) { var k = ASK.reader.cleanNum(r.name).trim(); if (L[r.kind] && (KBM[k] || []).length === 1 && L[r.kind].indexOf(r.name) < 0) L[r.kind].push(r.name); });
+    if (!L.Race.length || !L.Job.length || !L.Origin.length) return 'Elf Ninja Noble';
+    var cur = ['Race', 'Job', 'Origin'].map(function (k) { return by[k] ? by[k].name : ''; }), h = 0, s = cur.join('|');
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 100003;
+    NEXT++;
+    return ['Race', 'Job', 'Origin'].map(function (k, n) {
+      var list = L[k], j = (h + NEXT * (2 * n + 3)) % list.length;
+      if (list[j] === cur[n]) j = (j + 1) % list.length;
+      return list[j];
+    }).join(' ');
   }
   function topicFor(z) { var best = null, bl = 0; F.rules.topics.forEach(function (t) { t.kw.forEach(function (k) { if (has(z, k) && k.length > bl) { bl = k.length; best = t; } }); }); return best; }
   function ruleItem(r) { return r.status === 'HYPOTHESIS' ? [I('(HYPOTHESIS)'), ' ' + r.rule] : r.rule; }
@@ -13332,7 +13199,7 @@ var T=[
 {t:'Remaining uses',k:['remaining use','remaining uses'],s:['How many more times a skill can be used. A unit is dead when the total remaining uses of all its non-free skills is below 1.'],src:'Rule R35',c:C_HP},
 {t:'Free skill',k:['free skill','free skills'],s:['A skill flagged free. It stays usable with no uses left, it counts as 0 in the death check, and it is never a quick action.'],src:'Guide check (rules R35, R45, R47)',c:C_HP},
 {t:'Non-free skills',k:['non free skill','non free skills','nonfree skill','nonfree skills'],s:['Every skill that is not free. Their remaining uses are what the death check adds up.'],src:'Rule R35',c:C_HP},
-{t:'Who goes first',k:['who goes first','first turn','opening turn','goes first','go first','going first','who acts first','acts first','who moves first','moves first','who attacks first','attacks first'],s:["Turn order is not speed. The player usually acts first; the enemy opens about 1 fight in 3."],src:'Rules R42, R43',c:C_TURN},
+{t:'Who goes first',k:['who goes first','first turn','opening turn','goes first','go first','going first','who acts first','acts first','who moves first','moves first','who attacks first','attacks first','act first','acting first','attack first','attacking first','strike first','strikes first','move first','moving first','acts 1st','act 1st','goes 1st','go 1st','moves 1st','attacks 1st'],s:["Turn order is not speed. The player usually acts first; the enemy opens about 1 fight in 3."],src:'Rules R42, R43',c:C_TURN},
 {t:'Taking turns',k:['taking turns','turn taking'],s:['After every turn the other side acts, so sides alternate. Whether a quick action gives the same side another turn is unverified.'],src:'Rule R42',u:1,c:C_TURN},
 {t:'Quick action',k:['quick action','quick actions'],s:["An extra action (+1 Action!). Free skills are never quick, and a No-Quick state blocks it. Otherwise it comes from a skill's own quick flag, a forced-quick effect, a chance from 'add action' effects, or the Additional Action state. What it does to the turn order is unverified."],src:'Rule R45 and guide check',u:1,c:C_TURN},
 {t:'No-quick flag',k:['no quick flag','no quick flags','no quick','noquick','no quick state'],s:['A state on a unit (called No-Quick) that stops all of its skills from being quick actions.'],src:'Guide check',c:C_TURN},
@@ -13360,7 +13227,8 @@ var ENEMY=new RegExp('^(?:(?:how|what)(?:\x27s)?\\s+(?:is|are|do|does|did|will|w
 var HID_T='(?:an?\\s+|the\\s+)?hidden\\s+(?:turn\\s+)?order(?:\\s+(?:value|values|number|numbers|counter|counters))?';
 var HIDQ=new RegExp('^(?:'+LEAD+'\\s+)?'+HID_T+'(?:\\s+(?:mean|means|do|does))?$');
 var HIDW=new RegExp('^how\\s+(?:do|does|is|are)\\s+'+HID_T+'\\s+(?:work|works|used|calculated|decided|determined)$');
-  function match(q) { var n = ASK.reader.cleanTerm(q), m = R1.exec(n) || R2.exec(n) || R3.exec(n) || R4.exec(n); return m ? MAP[m[1]] : null; }
+var FIRSTQ=new RegExp("^(?:so\\s+|then\\s+|and\\s+)?(?:who|whos|who's|which\\s+side|which\\s+one|which)\\s+(?:will\\s+|would\\s+|gets?\\s+to\\s+|usually\\s+|normally\\s+|always\\s+|is\\s+going\\s+to\\s+|can\\s+)?(?:act|acts|go|goes|move|moves|attack|attacks|strike|strikes|start|starts|play|plays)\\s+(?:first|1st)(?:\\s+(?:in|during|at|on)\\s+(?:a\\s+|the\\s+|each\\s+|every\\s+|this\\s+)?(?:battle|battles|fight|fights|combat|run|runs|turn|game|dungeon|encounter|floor|room|boss\\s+fight))?$");
+  function match(q) { var n = ASK.reader.cleanTerm(q), m = R1.exec(n) || R2.exec(n) || R3.exec(n) || R4.exec(n); if (!m && FIRSTQ.test(n)) return MAP['who goes first']; return m ? MAP[m[1]] : null; }
   function label(e) { return 'game term \u00b7 ' + (e.lb || (e.u ? 'part unverified' : 'verified')); }
   function why(e) { return 'I answered from the guide\u2019s own checked rules: ' + e.t + ', labelled \u201c' + label(e) + '\u201d.' + (e.u ? ' One part is marked unverified, so I left it open instead of guessing.' : '') + (e.lb ? ' The evidence points this way, but it is not fully proven, so I did not call it verified.' : ''); }
   function withI(x) { var p = String(x).split(/\bunverified\b/), o = []; p.forEach(function (s, i) { if (i) o.push({i: 'unverified'}); if (s) o.push(s); }); return o; }
@@ -13594,7 +13462,8 @@ function names(){if(NAMES)return NAMES;NAMES=[];var seen={};
 function findNames(q){var t=nz(q),o=[];names().forEach(function(x){if(o.length>=3)return;var i=t.indexOf(x.l);if(i>=0){o.push(x);t=t.slice(0,i)+' '+t.slice(i+x.l.length-1);}});return o;}
 function nameChip(x){return x.kind==='stat'?btn(x.n,'What does '+x.n+' do?'):btn(x.n,'Tell me about '+x.n);}
 var RX={
- crisis:/\b(kill myself|killing myself|suicide|suicidal|end my life|want to die|wanna die|dont want to live|hurt myself|harm myself|cut myself|self harm|selfharm)\b/,
+ crisis:/\b(kill myself|killing myself|suicide|suicidal|end my life|want to die|wanna die|dont want to live|hurt myself|harm myself|cut myself|self harm|selfharm|feel like dying|wish i (?:was|were) dead|wish i wasnt alive|better off dead|no reason to live|dont want to be alive|dont want to exist|cant go on|cant take (?:it|this) any ?more|cant do this any ?more|cant keep going|(?:nobody|no one) would (?:miss|care about) me|(?:nobody|no one) would care if i|(?:want to|wanna|wish i could) (?:just )?disappear|wish i (?:was|were|had) never (?:been )?born|give up on life|tired of (?:living|life)|dont want to wake up|(?:im|i am|i feel like) (?:just )?a burden|better off without me)\b/,
+ low:/\b(?:hate my ?(?:life|self)|hate myself|(?:im|i am|i feel|feel) (?:so |really |such |just |completely )?(?:worthless|useless|a failure|a loser|a disappointment|empty inside|hopeless|unlovable|so alone|all alone)|(?:life|my life|everything) is (?:pointless|meaningless|hopeless)|(?:nobody|no one) (?:likes|loves|cares about|understands|wants) me|i have no friends|i give up on everything)\b/,
  greet:/^(hi+|hello+|hey+|heya|hiya|yo|sup|howdy|hola|good (morning|afternoon|evening)|greetings)( there| everyone| all| guys| bot| buddy| friend)?$/,
  bye:/\b(bye|goodbye|good night|goodnight|gn|gtg|g2g|see you|see ya|cya|gotta go|have to go|im off|logging off|going to sleep|heading out|talk later|ttyl)\b/,
  thanks:/\b(thanks|thank you|thx|ty|tysm|cheers|appreciate it)\b/,
@@ -13646,9 +13515,19 @@ var CHD=[['Stop dying so fast','stop dying so fast'],['Best armor for a tank','b
 var JOKES=['Why do skeletons never fight each other? They do not have the guts.','I told my sword a joke. It was a bit blunt.','What do you call a mage with no mana? Just someone in a very nice hat.','Why did the tank refuse to dance? Too much armor, not enough rhythm.','I would tell you a joke about HP stacks, but you would not survive the punchline.','Why was the dungeon so calm? It had nothing to hide, only floors.'];
 function chipsHtml(list,names){var h='';(list||[]).forEach(function(c){h+=btn(c[0],c[1]);});(names||[]).forEach(function(x){h+=nameChip(x);});return h?'<div class="qa-ex">'+h+'</div>':'';}
 function pending(){var ok=T.ask&&(Date.now()-T.askAt)<150000;return ok?T.ask:'';}
+function answerable(A,act){var prev=T.turns.length?T.turns[T.turns.length-1]:null,WD=ASK.tools.words;
+  if(!prev||!prev.topic||pending()!=='tellmore'||!WD||!WD.canAnswer)return false;
+  if((act||actOf(A))!=='statement'&&(act||actOf(A))!=='like')return false;
+  return !A.gameish&&!A.allNames.length&&A.ws.length<=12&&WD.canAnswer(prev.topic)&&!newSubject(A,prev);}
+function newSubject(A,prev){var WD=ASK.tools.words,FR=ASK.tools.frames;try{if(WD.overlaps&&WD.overlaps(A))return false;
+  if(FR&&FR.read(A))return true;var tp=WD.topic(A.raw);if(tp&&tp.topic!==prev.topic&&A.verb)return true;
+  return A.ws.length>(/^frame:/.test(prev.topic)?4:3)&&!!tp&&tp.topic!==prev.topic;}catch(e){ASK.err('talk: new subject',e);return false;}}
+function frameOf(A,act){if(!/^(statement|like|mood|question)$/.test(act)||!ASK.tools.frames)return null;var fr=null;
+  try{fr=ASK.tools.frames.read(A,F);}catch(e){ASK.err('talk: frame',e);fr=null;}if(fr&&act==='mood'&&fr.kind==='feel'&&!fr.c)fr=null;return fr;}
 function actOf(A){var p=A.plain,w=A.ws.length;
   if(!p&&!A.raw)return 'empty';
   if(RX.crisis.test(p))return 'crisis';
+  if(RX.low.test(p)){A.mood='down';return 'mood';}
   var na=(A.raw.match(/[^\x00-\x7f]/g)||[]).length;if(A.raw.length>3&&na/A.raw.length>0.4)return 'foreign';
   if(w===1&&((/^[^aeiou0-9]{4,}$/.test(p))||/(.)\1{4,}/.test(p)||/^(asdf\w*|qwer\w*|zxcv\w*|jkl\w*|hjkl\w*)$/.test(p)))return 'gibber';
   if(calc(A.low))return 'calc';
@@ -13680,10 +13559,34 @@ function actOf(A){var p=A.plain,w=A.ws.length;
   if(A.isQ)return 'question';
   return 'statement';}
 var MOODSAY={tired:['That sounds tiring.','If you can, take a break. The guide will still be here.'],bored:['Bored, hm.','If you want something to poke at, try an odd question like \u201cwhich skills grant burn\u201d.'],happy:['Glad to hear it!','What is making it a good one?'],upset:['That sounds frustrating.','Is it the game or something else? Tell me, I am listening. If it is a boss or gear problem, I can go look in the guide.'],stressed:['That sounds like a lot.','One thing at a time. I can listen for a bit, and talking it out sometimes helps.'],down:['I am sorry you are feeling low.','I am only the guide\u2019s Ask box, so I cannot give you what a friend can. If it keeps weighing on you, tell someone you trust.'],hungry:['Go eat something!','The dungeon can wait.'],sick:['Hope you feel better soon.','Rest up. The guide will still be here when you are back.']};
+var SUBSTOP=set('i im ive id me my mine myself you your youre yours we our us the a an and or but so to of in on at for with from about is are was were be been am do does did dont what whats which who how why when where can cant could should would will wont shall give gives get got more most some any this that these those it its there their they them he she his her just really very much many wish want wanna hope plan need miss feel think know like love good bad still also even only not yes yeah okay then than');
+function cwords(p){return String(p||'').split(' ').filter(function(w){return w.length>=3&&!SUBSTOP[w]&&!/^\d+$/.test(w);});}
+function subjectHit(A,act){var S=T.sub;if(!S||Date.now()-S.at>300000)return false;
+  if(!/^(statement|question|like)$/.test(act)||A.gameish)return false;
+  if(A.allNames.some(function(x){var l=x.l.trim();return l.indexOf(' ')>0||!EVERYDAY[l];}))return false;
+  var FR=ASK.tools.frames,WD=ASK.tools.words;if(!FR||!FR.more||!WD||(FR.gameWord&&FR.gameWord(A.plain)))return false;
+  return cwords(A.plain).some(function(w){return S.W[w]||S.W[w+'s']||(w.length>3&&w.slice(-1)==='s'&&S.W[w.slice(0,-1)]);});}
+function subjectFollow(A,act){if(!subjectHit(A,act))return null;var S=T.sub,FR=ASK.tools.frames,WD=ASK.tools.words;
+  var qs=FR.more(S.k).filter(function(x){return S.asked.indexOf(x)<0;}),L=[],chips=null,ask='';
+  if(A.isQ){L.push('That is a real-world question, and I only hold Buriedbornes 2 facts, so I cannot answer it for sure.');
+    chips=[['Answer it from the guide instead',A.raw.replace(/[?.!\s]+$/,'')+' in buriedbornes']];}
+  else{var said=WD.turn(A.raw).replace(/[.!\s]+$/,'');L.push('So '+esc(said)+'.');WD.remember(said,S.k,S.label,'');}
+  if(qs.length){L.push(qs[0]);ask='tellmore';var q2=qs[1]&&FR.generic&&FR.generic.indexOf(qs[1])<0?qs[1]:null;WD.pend(S.k,S.label,[qs[0],q2],0);S.asked.push(qs[0]);if(q2)S.asked.push(q2);}
+  else{L.push('Thanks for telling me about it. Ask me anything about the game whenever you like.');}
+  return {L:L,chips:chips,ask:ask,topic:qs.length?S.k:'',label:S.label};}
+function setSub(k,label,A,asked){if(!k)return;if(!T.sub||T.sub.k!==k)T.sub={k:k,label:label||'that',W:{},asked:[],at:0};
+  cwords(A.plain).forEach(function(w){T.sub.W[w]=1;});(asked||[]).forEach(function(x){if(x&&T.sub.asked.indexOf(x)<0)T.sub.asked.push(x);});T.sub.at=Date.now();}
 function reply(q){var A=analyse(q),act=actOf(A),L=[],chips=null,ask='',tag='',f=A.focus,F=f?'<b>'+esc(f)+'</b>':'',nm=A.names,kindLabel='';
   var prev=T.turns.length?T.turns[T.turns.length-1]:null,recent=prev&&(Date.now()-prev.t)<300000;
+  var ta=null;if((act==='statement'||act==='like')&&answerable(A,act)){try{ta=ASK.tools.words.answer(A);}catch(e){ASK.err('talk: topic answer',e);ta=null;}if(ta)act='answer';}
+  var fr=ta?null:frameOf(A,act),frr=fr?ASK.tools.frames.reply(fr):null;if(frr)act='frame';
+  var tq=null;if(!ta&&!frr){try{tq=subjectFollow(A,act);}catch(e){ASK.err('talk: subject',e);tq=null;}if(tq)act='topicq';}
+  try{if(frr)setSub(frr.topic,frr.label,fr.A||A,frr.qs);else if(ta)setSub(ta.topic||(prev&&prev.topic)||(T.sub&&T.sub.k),ta.label,A,[]);else if(tq){if(tq.topic)setSub(tq.topic,tq.label,A,[]);else T.sub=null;}}catch(e){ASK.err('talk: subject',e);}
   function back(){if(recent&&prev.focus&&prev.focus!==f&&/^(statement|like|question|win)$/.test(prev.act)&&Math.random()<0.3)L.push(pick('bk',['Earlier you mentioned <b>'+esc(prev.focus)+'</b>; we can come back to it.','We were on <b>'+esc(prev.focus)+'</b> a moment ago. Still thinking about it?']));}
   switch(act){
+  case 'answer':kindLabel='reply to my question about '+ta.label;L=ta.L;ask=ta.ask;break;
+  case 'topicq':kindLabel='more about '+tq.label;L=tq.L;ask=tq.ask;chips=tq.chips;break;
+  case 'frame':kindLabel='a sentence about '+(fr.kind==='should'?'a choice':'something you '+({wish:'wish for',want:'want',hope:'hope',plan:'plan',need:'need',worry:'worry about',afraid:'are scared of',tired:'are tired of',miss:'miss',lost:'lost',feel:'feel',news:'told me',should1:'are deciding',cant:'cannot do',doing:'are doing',good:'are happy about',bad:'are sorry about',did:'did',excited:'look forward to',day:'had',weather:'see outside'}[fr.kind]||'said'));L=frr.L;ask=frr.ask;chips=frr.chips||null;break;
   case 'empty':kindLabel='empty';L=['I got an empty message. Type a few words and I will answer.'];break;
   case 'crisis':kindLabel='worrying message';L=['I am really sorry you are going through this. I am only a guide box and cannot help the way a person can.','Please reach out now to someone you trust, or to your local emergency number or a crisis line. You deserve real support.'];break;
   case 'foreign':kindLabel='not English';L=['I can only read English in this box, so I could not make out your message.','Try it in English and I will answer.'];break;
@@ -13744,13 +13647,16 @@ function reply(q){var A=analyse(q),act=actOf(A),L=[],chips=null,ask='',tag='',f=
   }
   var showN=(act!=='botq'&&nm.length)?nm:[],nmLine=showN.length?line('I spotted '+(showN.length>1?'these entries':'this entry')+' in the guide, tap to look '+(showN.length>1?'one':'it')+' up:'):'';
   var fold='<details class="qa-more qa-fold" data-debug="1"><summary>What I picked up</summary>'+line(lab('Kind of message')+esc(kindLabel))+line(lab('Words I picked up')+(A.words.length?esc(A.words.join(', ')):'none'))+(A.allNames.length?line(lab('Guide names found')+esc(A.allNames.map(function(x){return x.n;}).join(', '))):'')+line('These replies are hand-written and fill in your own words. They run offline, look nothing up online and add no game facts.')+'</details>';
-  var html='<div class="qa-card" data-ft="1">'+L.map(function(x,i){return line((i===0?tag:'')+x);}).join('')+nmLine+chipsHtml(chips,showN)+fold+'</div>';
-  return {act:act,kind:kindLabel,html:html,ask:ask,focus:f,words:A.words,names:A.allNames.map(function(x){return x.n;}),text:L.join(' ').replace(/<[^>]+>/g,'')};}
+  var html='<div class="qa-card" data-ft="1"'+(ta||frr?' data-ans="1"':'')+'>'+L.map(function(x,i){return line((i===0?tag:'')+x);}).join('')+nmLine+chipsHtml(chips,showN)+fold+'</div>';
+  return {act:act,kind:kindLabel,html:html,ask:ask,topic:ta?ta.topic:(frr?frr.topic:(tq?tq.topic:'')),focus:f,words:A.words,names:A.allNames.map(function(x){return x.n;}),text:L.join(' ').replace(/<[^>]+>/g,'')};}
 var SOCIAL=/^(?:(?:hi+|hello+|hey+|heya|hiya|yo|sup|howdy|hola|greetings|good (?:morning|afternoon|evening|day))(?: there| everyone| all| guys| bot| buddy| friend)?|(?:thanks?|thank you|thank u|thanku|thx|ty|tysm|cheers|appreciate it|many thanks)(?: so much| a lot| very much| again)?(?: bot| buddy| man| bro| friend)?|(?:bye+|goodbye|good night|goodnight|gn|see you|see ya|cya|ttyl|talk later)(?: later| tomorrow| all| everyone| soon)?)$/;
 var SOCIALACT={hard:1,mood:1,joke:1,laugh:1,compl:1,insult:1,idk:1};
 function social(q){var A=analyse(q);if(!A.plain)return false;
   if(SOCIAL.test(A.plain)&&!A.allNames.some(function(x){return x.l.trim().indexOf(' ')>0;}))return true;
   var act=actOf(A);if(act==='crisis')return true;
+  if(answerable(A,act))return true;
+  if(frameOf(A,act))return true;
+  if(subjectHit(A,act))return true;
   return !!SOCIALACT[act]&&!A.gameish&&!A.allNames.length&&A.ws.length<=8;}
 function ccard(lines,title,extra){return '<div class="qa-card" data-intent="1" data-lex="1">'+(title?'<div class="qa-title">'+title+'</div>':'')+lines.map(function(l){return '<div class="qa-line">'+l+'</div>';}).join('')+(extra||'')+'</div>';}
 function cbtn(l,q){return '<button type="button" class="qa-exbtn" data-ex="'+q+'">'+l+'</button>';}
@@ -13802,6 +13708,606 @@ function custom(raw){var p=nz(raw).trim(),w=p?p.split(' ').length:0;if(!p||w>10)
 })(typeof window !== 'undefined' ? (window.ASK = window.ASK || {}) : module.exports);</script>
 <script>(function (ASK) {
   'use strict';
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+  var GAMEW = /\b(build|builds|boss|bosses|dungeon|dungeons|skill|skills|stat|stats|farm|farming|gear|weapon|weapons|armor|armour|accessory|accessories|rune|runes|contract|contracts|crit|crits|parry|evasion|evade|dodge|dodging|hit|hits|attack|attacks|loot|drop|drops|star|stars|hp|soulstone|soulstones|reroll|rerolls|damage|dmg|tank|healer|mage|summon|summons|disaster|conquest|floor|run|runs|level|levels|exp|xp|survive|surviving|survival|killed|died|character|characters|stay alive)\b/;
+  var EVERYDAY = {}; ('rest pray escape observe slash healing beach forest mine ruins highway mansion swamp caves slums factory nightmare dog cat human noble pirate warrior scholar engineer zealot exile vanity cunning pauper focus guts rage shield trick steady haste greed prayer influence judgement scream eclipse evasion critical accuracy avatar sanctuary rainbow graduate ruler puppet mushroom twilight eternity moonlight volcanic learning disaster sniping toughness').split(' ').forEach(function (w) { EVERYDAY[w] = 1; });
+  var GN = null, GF = null;
+  function guideNames(F) {
+    if (GN && GF === F) return GN; GF = F; GN = []; var seen = {};
+    var add = function (n) { var l = ASK.reader.clean(n); if (l.length < 3 || seen[l]) return; seen[l] = 1; GN.push(l); };
+    (F.roster || []).forEach(function (r) { add(r.name); }); (F.places || []).forEach(function (p) { add(p.name); });
+    (F.kb || []).forEach(function (e) { add(e.name); }); (F.stats || []).forEach(add); (F.details || []).forEach(function (d) { add(d.name); });
+    'str dex int pie piety strength dexterity intelligence'.split(' ').forEach(add);
+    GN.sort(function (a, b) { return b.length - a.length; }); return GN;
+  }
+  var PL = null;
+  function namesIn(p, F, strict) {
+    if (!F) return false; var t = ' ' + p + ' ';
+    if (!PL) { PL = {}; (F.places || []).forEach(function (x) { PL[ASK.reader.clean(x.name)] = 1; }); }
+    return guideNames(F).some(function (l) { var i = t.indexOf(' ' + l + ' '); if (i < 0) return false;
+      if (/ (my|our|your|his|her|their)$/.test(t.slice(0, i))) return false; return strict || l.indexOf(' ') > 0 || !EVERYDAY[l] || PL[l]; });
+  }
+  function alsoNames(p, F) {
+    if (!F) return []; var t = ' ' + p + ' ', out = [];
+    guideNames(F).forEach(function (l) { var i = t.indexOf(' ' + l + ' '); if (i < 0 || !EVERYDAY[l] || / (my|our|your|his|her|their)$/.test(t.slice(0, i))) return;
+      var nm = l.replace(/\b\w/g, function (c) { return c.toUpperCase(); }); if (out.length < 2) out.push([nm + ' (in the guide)', 'tell me about ' + l]); });
+    return out;
+  }
+  var LEAD = '^(?:so |well |honestly |hmm |ok |okay |and |but |sometimes |lately |today |right now )*';
+  var SHAPES = [
+    ['should', new RegExp(LEAD + '(?:should i|shall i|do i|would it be better to) (.+?) or (.+?)$')],
+    ['should1', new RegExp(LEAD + '(?:should i|shall i|do you think i should) (.+)$')],
+    ['day', new RegExp(LEAD + '(?:(?:today|tonight|yesterday|this week|this morning|work|school|class|my day|the day|it) (?:was|is|has been|felt)|i had|i have had|ive had|im having|i am having|having) (?:a |such a |kind of a )?(?:so |really |very |pretty |super |kinda )?(long|bad|good|great|rough|tough|busy|hard|tiring|stressful|awful|terrible|amazing|fun|boring|nice|crazy|productive|lazy|weird|chill|relaxing)(?: (?:day|week|night|morning|one|shift))?$')],
+    ['weather', /^(?:its|it is|it s|its been|it has been|it keeps)? ?(?:so |really |very |super |kinda |pretty )?(raining|snowing|hot|freezing|sunny|windy|stormy|humid|cloudy|pouring)(?: (?:here|today|outside|again|right now|now|all day))*$/],
+    ['excited', new RegExp(LEAD + '(?:i (?:cant|can not|cannot) wait (?:for|to|until|till)|i(?:m| am) (?:so |really |super )?(?:excited|hyped|pumped) (?:for|about|to)) (.+)$')],
+    ['wish', new RegExp(LEAD + 'i (?:really |just |kinda |sometimes |always )?wish (?:that )?(.+)$')],
+    ['hope', new RegExp(LEAD + 'i (?:really |just )?hope (?:that )?(.+)$')],
+    ['plan', new RegExp(LEAD + '(?:i(?:m| am) (?:planning|going|gonna|thinking of|thinking about)|i plan|i will|ill) (.+)$')],
+    ['worry', new RegExp(LEAD + 'i(?:m| am)? (?:so |really |a bit |kinda |very )?(?:worried|anxious|nervous|stressed) (?:about|for|over) (.+)$')],
+    ['afraid', new RegExp(LEAD + 'i(?:m| am)? (?:so |really |a bit |kinda |very )?(?:afraid|scared|terrified|frightened) (?:of|that) (.+)$')],
+    ['tired', new RegExp(LEAD + 'i(?:m| am)? (?:so |really |a bit |kinda |very )?(?:tired|sick|fed up) (?:of|with) (.+)$')],
+    ['miss', new RegExp(LEAD + 'i (?:really |just |kinda |so )?miss (.+)$')],
+    ['lost', new RegExp(LEAD + 'i (?:just |think i )?(?:lost|misplaced|broke) (.+)$')],
+    ['need', new RegExp(LEAD + 'i (?:really |just )?(?:need|needed) (.+)$')],
+    ['want', new RegExp(LEAD + 'i (?:really |just |kinda |still )?(?:want|wanna|would like|wanted) (.+)$')],
+    ['cant', new RegExp(LEAD + 'i (?:just |really |still |honestly )?(?:cant|cannot|can not|couldnt|could not) (.+)$')],
+    ['doing', new RegExp(LEAD + 'i(?:m| am) (?:currently |still |now |finally |slowly |also |trying to )?((?:learning|studying|reading|watching|moving|working on|building|saving|practicing|practising|training|writing|starting)\\b.*)$')],
+    ['ill', new RegExp(LEAD + 'i (?:have|got|ve got|have got|caught|think i have|think i got) (?:a |the |some )?(?:bad |terrible |little |slight )?((?:cold|flu|fever|cough|headache|toothache|migraine|sore throat|stomach ?ache|covid)\\b.*)$')],
+    ['event', new RegExp(LEAD + 'i (?:just |finally |recently |also |actually )?((?:got|passed|won|graduated|finished|aced|bought|adopted|joined|started|became|met|found|fixed|built|made|failed|flunked|fought|argued|crashed|hurt|injured|forgot|went|visited|watched|played|cooked|ate|tried|walked|swam|saw|took|cleaned|baked|drew|painted|had)\\b.*)$')],
+    ['feel', new RegExp(LEAD + 'i (?:feel|felt|have been feeling|been feeling)(?: like)? (.+)$')],
+    ['news', new RegExp(LEAD + 'my (\\w+(?: \\w+)?) (?:is|are|was|were|has|have|got|keeps|just|went) (.+)$')]
+  ];
+  var PLACES = 'japan|korea|china|taiwan|hong kong|thailand|vietnam|singapore|malaysia|indonesia|bali|philippines|manila|cebu|boracay|india|dubai|europe|asia|america|the us|the usa|usa|canada|mexico|brazil|france|paris|italy|rome|spain|germany|england|london|the uk|australia|new zealand|hawaii|tokyo|osaka|kyoto|seoul|new york|disneyland|the beach';
+  var CONCEPTS = [
+    {re: new RegExp('\\b(work|job|live|living|study|studying|move|moving)\\b.*\\b(abroad|overseas|another country|other country|(?:to|in) (?:' + PLACES + '))\\b'), k: 'abroad', label: 'that plan', q: ['Is it more for the money, or to see the world?', 'Do you have a country in mind?']},
+    {re: /\b(?:learn|learning|study|studying|speak)\b.*\b(japanese|english|korean|spanish|french|chinese|german|italian|language|languages)\b/, k: 'language', label: 'the language', q: ['Is it for travel, for work, or just for fun?', 'How far along are you?']},
+    {re: /\b(better|good|stronger|weak|weaker|improve|improving|pro|best|stuck|bad|learning|started|starting|new to|beginner|getting into)\b.*\b(game|this game|buriedbornes|bb2)\b|\b(game|this game)\b.*\b(better|harder|improve|weak|stuck)\b/, k: 'game', game: true},
+    {re: /\b(exam|exams|test|tests|quiz|quizzes|finals|board exam|thesis)\b/, k: 'exam', label: 'the exam', q: ['Is it the exam itself, or how much there is to study?', 'When is it?'],
+      good: ['Was it a hard one?', 'How are you going to celebrate?'], bad: ['Was it a hard one?', 'Can you take it again?'], doing: ['When is it?', 'Which part is the hardest?']},
+    {re: /\b(promoted|promotion|a raise)\b/, k: 'promoted', label: 'the promotion', only: 'event news', good: ['What will change for you?', 'How are you going to celebrate?']},
+    {re: /\b(hired|new job|first job|job offer)\b/, k: 'newjob', label: 'the new job', only: 'event news', good: ['What will you be doing?', 'When do you start?']},
+    {re: /\b(dog|cat|puppy|kitten|hamster|rabbit|bunny|parrot|bird|fish|turtle)\b/, k: 'pet', label: 'your pet', only: 'event', good: ['What is its name?', 'How old is it?']},
+    {re: /\b(fight|fought|argument|argued|arguing|yelled at|mad at me|angry at me)\b/, k: 'fight', label: 'that', q: ['Do you want to talk about what happened?', 'Are things okay between you now?'], bad: ['Do you want to talk about what happened?', 'Are things okay between you now?']},
+    {re: /\b(gym|workout|work out|working out|exercise|exercising|training|yoga|jog|jogging|running|swim|swimming|hike|hiking)\b/, k: 'gym', label: 'that', q: ['Is it a new habit, or something you have done for a while?', 'How do you feel after?'], did: ['How did it go?', 'Is it a new habit, or something you have done for a while?'], doing: ['Is it a new habit, or something you have done for a while?', 'How do you feel after?']},
+    {re: /\b(guitar|piano|violin|ukulele|drums|drawing|draw|paint|painting|sing|singing|dance|dancing|knitting|crochet|baking|photography|coding|programming)\b/, k: 'hobby', label: 'that', q: ['How long have you been at it?', 'What got you into it?'], doing: ['How long have you been at it?', 'What got you into it?']},
+    {re: /\bbirthday\b/, k: 'birthday', label: 'your birthday', q: ['Any plans for it?', 'What would make it a great day?']},
+    {re: /\b(book|novel|manga|comic|series|show|anime|movie|film)\b/, k: 'story', label: 'that', only: 'event doing', q: ['What is it about?', 'Would you recommend it?']},
+    {re: /\b(moving|move|moved)\b.*\b(house|home|apartment|flat|place|city|town)\b|\bnew (house|apartment|flat|place)\b/, k: 'house', label: 'the move', q: ['Is it far from where you live now?', 'What are you looking forward to most?'], doing: ['Is it far from where you live now?', 'What are you looking forward to most?']},
+    {re: /\b(moving away|moving out|leaving|going away|moved away)\b/, k: 'away', label: 'that', q: ['Will you still be able to keep in touch?', 'How do you feel about it?']},
+    {re: /\b(wallet|keys|key|bag|passport|id|card|purse|umbrella)\b/, k: 'thing', label: 'that', q: ['Do you remember where you last had it?', 'Is it easy to replace?']},
+    {re: /\b(phone|laptop|computer|pc|car|bike|console|headphones|tablet)\b/, k: 'device', label: 'that', q: ['Is the old one broken, or is it just time for a new one?', 'Do you have one in mind already?'],
+      good: ['Do you like it so far?', 'What made you pick that one?'], should1: ['Is the old one still working?', 'Is there one you have your eye on?']},
+    {re: /\b(become|becoming|be)\s+an?\s+[a-z]{3,}/, k: 'become', label: 'that dream', q: ['What got you interested in it?', 'What is the first step to get there?']},
+    {re: /\b(go|get|going|getting|be|back|come|coming|head|heading|went|got|came)\s+home\b|\bhomesick\b/, k: 'gohome', label: 'home', q: ['Long day?', 'What is the first thing you will do when you get there?']},
+    {re: new RegExp('\\b(trip|travel|travelling|traveling|visit|visited|visiting|vacation|holiday|(?:to|in) (?:' + PLACES + '))\\b'), k: 'trip', label: 'the trip', q: ['What do you want to see first?', 'Who are you going with?'], did: ['What was the best part?', 'Would you go back?']},
+    {re: /\b(job|work|boss|office|shift|career|coworkers?|colleagues?)\b/, k: 'work', label: 'work', q: ['Is it the work itself, or the people around it?', 'What would you rather be doing?'],
+      should1: ['What makes you want to?', 'Do you have something else lined up?']},
+    {re: /\b(sleep|sleeping|rest|nap|bed)\b/, k: 'sleep', label: 'sleep', q: ['How much sleep are you getting lately?', 'Is something keeping you up?'], cant: ['Is something on your mind, or are you just restless?', 'How long has it been like this?']},
+    {re: /\b(cold|flu|fever|cough|headache|toothache|stomach ?ache|ill|covid|migraine|sore throat|hurt|injured|hospital|doctor|dentist|clinic)\b|\bsick\b(?! of| and tired| with)/, k: 'health', label: 'how you feel', q: ['Are you getting some rest?', 'Is it getting any better?'],
+      news: ['Is it serious?', 'Is someone looking after them?'], did: ['Is everything okay?', 'Do you have to go back?'], bad: ['Are you getting some rest?', 'Is it getting any better?']},
+    {re: /\b(eat|eating|food|dinner|lunch|breakfast|snack)\b/, k: 'food', label: 'food', only: 'cant should1', q: ['What are you in the mood for?', 'Something quick, or something special?']},
+    {re: /\b(grandma|grandpa|grandmother|grandfather|mom|mum|dad|mother|father|brother|sister|family|friend|friends|wife|husband|girlfriend|boyfriend|cousin|aunt|uncle|son|daughter|kids|baby|dog|cat|puppy|kitten|pet|pets)\b/, k: 'people', only: 'miss', label: 'them', q: ['What do you miss most about them?', 'When did you last see them?']}
+  ];
+  var SHAPEQ = {
+    wish: ['What is stopping you right now?', 'How long have you wanted that?'],
+    want: ['What made you want that?', 'Is it something you can start on soon?'],
+    hope: ['What would it mean for you if it happens?', 'Is there anything that could help it along?'],
+    plan: ['When do you want to do it?', 'Is it all worked out, or still an idea?'],
+    need: ['Is it urgent, or something for later?', 'Do you know where to get it?'],
+    worry: ['What worries you most about it?', 'Is there anything that would make it easier?'],
+    afraid: ['Is it something coming up soon?', 'Has it happened before?'],
+    tired: ['Is it the thing itself, or something around it?', 'What would help you take a break from it?'],
+    miss: ['What do you miss most?', 'When was the last time?'],
+    lost: ['Do you remember where you last had it?', 'Is it easy to replace?'],
+    feel: ['What makes you feel that way?', 'How long have you felt like this?'],
+    news: ['How do you feel about it?', 'What happens next?'],
+    should1: ['What makes you think about it?', 'What would change if you did?'],
+    cant: ['What is getting in the way?', 'Has it been like this for a while?'],
+    doing: ['How is it going so far?', 'What got you started?'],
+    good: ['How do you feel about it?', 'What happens next?'],
+    bad: ['Do you want to talk about it?', 'Is there anything that would help right now?'],
+    did: ['How was it?', 'Would you do it again?'],
+    excited: ['What are you looking forward to most?', 'How long until then?'],
+    weather: ['Do you like that kind of weather?', 'Does it change your plans for today?']
+  };
+  var DAYS = [[/^(good|great|amazing|fun|nice|productive)$/, 'Glad to hear it!', ['What was the best part?', 'Anything fun planned for the rest of it?']],
+    [/^(bad|rough|tough|hard|awful|terrible|stressful)$/, 'Sorry to hear that.', ['What made it so rough?', 'Do you get some time to rest now?']],
+    [/^(long|busy|tiring|crazy)$/, 'Sounds like a lot.', ['What kept you so busy?', 'Do you get some time to rest now?']],
+    [/./, 'I see.', ['What did you get up to?', 'Anything you would change about it?']]];
+  var GOODV = /^(got|passed|won|graduated|finished|aced|bought|adopted|joined|became|found|fixed|built|made)$/, BADV = /^(failed|flunked|fought|argued|crashed|hurt|injured|forgot)$/;
+  var BADW = /\b(sick|ill|fired|hurt|injured|killed|died|dead|attacked|beaten|stolen|dumped|rejected|robbed|scammed|lost|failed|cold|flu|fever|covid|bad|worse|low|grounded|detention|ticket|accident|fight|argument|scolded|yelled|bitten|stung|burned|sunburn|cavity|cavities|zero|badly|terrible|awful|wrong|broken|broke)\b/;
+  var GOODW = /\b(well|great|good|amazing|fine|better|awesome|perfect|passed|promoted|engaged|married|pregnant|recovered|healed)\b/;
+  var SHOULDG = /\b(race|races|job|jobs|origin|origins|class|classes|item|items|equip|equipment|upgrade|potion|potions|sword|swords|axe|bow|staff|shield|ring|amulet|helmet|boots|game|play|playing)\b/;
+  var FIRST = {worry: 'That sounds stressful.', afraid: 'That sounds scary.', tired: 'That sounds draining.', lost: 'Ugh, that is annoying.', feel: 'Thanks for telling me.',
+    cant: 'That sounds frustrating.', good: 'That is great news!', bad: 'I am sorry to hear that.', excited: 'That sounds fun!'};
+  var GAMECHIPS = [['How do I stay alive early in a run?', 'how do I stay alive early in a run'], ['Which race for a beginner', 'which race is best for a beginner'], ['Best armor for a tank', 'best armor for tank']];
+  function match(A, F) {
+    if (!A || !A.plain) return null;
+    if ((A.allNames || []).some(function (x) { var l = String(x.l || '').trim(); return l.indexOf(' ') > 0 || !EVERYDAY[l]; })) return null;
+    var p = A.plain, n = A.ws.length; if (n < 2 || n > 20) return null;
+    for (var i = 0; i < SHAPES.length; i++) {
+      var m = SHAPES[i][1].exec(p); if (!m) continue;
+      var kind = SHAPES[i][0], obj = m[m.length - 1].trim(), val = '';
+      if (n < 3 && kind !== 'weather') return null;
+      var sh = kind === 'should' || kind === 'should1';
+      if (A.gameish || GAMEW.test(p) || namesIn(p, F, sh)) return null;
+      if (sh && SHOULDG.test(p.replace(/\b(my|our|your) \w+/g, ''))) return null;
+      if (kind === 'ill') kind = 'bad';
+      if (kind === 'event') { var v = obj.split(' ')[0]; kind = BADV.test(v) || BADW.test(obj) ? 'bad' : GOODV.test(v) ? 'good' : v === 'had' && !/\b(fight|argument|accident|cold|flu|fever)\b/.test(obj) ? 'did' : v === 'had' ? 'bad' : 'did'; }
+      if (kind === 'news') val = BADW.test(obj) ? 'bad' : GOODW.test(obj) ? 'good' : '';
+      if (kind === 'day') return {kind: kind, obj: m[1], A: A};
+      if (kind === 'weather') return {kind: kind, obj: m[1], A: A};
+      var c = null; for (var j = 0; j < CONCEPTS.length; j++) if ((!CONCEPTS[j].only || (' ' + CONCEPTS[j].only + ' ').indexOf(' ' + (kind === 'good' || kind === 'bad' || kind === 'did' ? 'event' : kind) + ' ') >= 0) && CONCEPTS[j].re.test(p)) { c = CONCEPTS[j]; break; }
+      if (c && c.game) return {kind: kind, c: c, A: A};
+      if (kind === 'should') return {kind: kind, a: m[1], b: m[2], A: A};
+      if (kind === 'lost' && /\b(my job|a job|the job|weight)\b/.test(obj)) return null;
+      return {kind: kind, obj: obj, c: c, val: val, A: A};
+    }
+    return null;
+  }
+  var COMMON = {}; ('i im ive id ill me my mine myself you your we our us they them their he she him her his it its this that these those a an the and or but so if of to in on at for with about from by up down out over into off as is am are was were be been being do does did done doing have has had having go goes went gone get gets got getting make made take took come came see saw seen know knew think thought say said tell told give gave find found keep kept let put run ran read write wrote eat ate drink drank play played call called try tried use used ask asked look looked help helped turn start stop wait walk talk stay leave left bring brought buy bought pay paid meet met sit sat stand stood lose win won hold held hear heard mean meant set show showed fall fell feel felt grow grew open close live lived love loved like liked hate hated need want wish hope miss plan when where why how what who which whose then than there here now today tonight tomorrow yesterday soon later already still just really very too also not no yes yeah maybe please thanks thank sorry okay ok well good bad great nice fine new old big small long short high low first last next many much more most less few lot lots all any some every each other another same different own only even back again never always often sometimes usually one two three four five ten time day days week weeks month months year years night morning home house school work job money people person man woman men women kid kids friend family life world thing things way place game games guide box cant dont wont didnt isnt wasnt doesnt couldnt shouldnt wouldnt havent hasnt arent werent thats whats lets went want won mess list last lose lost cost most must mist best rest test west fest bust dust just must').split(' ').forEach(function (w) { if (w) COMMON[w] = 1; });
+  ('able about above accept accident across act action active actor actually add address admit adult advice afford afraid after afternoon again against age agree ahead air airport alarm alive allow almost alone along already alright although amazing among amount angry animal answer anxious anybody anymore anyone anything anyway anywhere apart apartment apologize app apple appointment area argue arm army around arrive art article artist ask asleep attack attention aunt autumn available average avoid awake award aware away awesome awful awkward baby back background bad badly bag bake bakery ball band bank bar base basic basketball bath bathroom battery beach bear beat beautiful beauty because become bed bedroom beef beer before begin beginning behind believe bell belong below belt beside best bet better between beyond bicycle bike bill bird birth birthday bit bite bitter black blame blanket blind block blood blow blue board boat body boil bone book boot border bored boring born borrow boss both bother bottle bottom bowl box boy boyfriend brain branch brand brave bread break breakfast breath breathe brick bridge brief bright brilliant bring broad broken brother brown brush budget bug build building bunch burn burst bus business busy butter button buy cab cake call calm camera camp campus can cancel cancer candle candy cap capital captain car card care career careful carry case cash cat catch cause ceiling celebrate cell center century certain chair challenge champion chance change channel chapter character charge cheap cheat check cheek cheer cheese chef chicken chief child childhood children chill chip chocolate choice choose church cinema circle citizen city class classic classmate clean clear clever click client climb clinic clock close closet clothes cloud club coach coast coat code coffee coin cold collect college color colour come comfortable comment common company compare complain complete computer concert condition confident confused congrats congratulations connect consider contact continue control conversation cook cookie cool copy corner correct cost cough could count country couple courage course cousin cover cow crash crazy cream create credit crew crime cross crowd crown cruel cry cup cupboard curious current curtain customer cut cute dad daily damage dance danger dangerous dark date daughter dead deal dear death debt decide decision deep definitely degree delicious deliver dentist depend describe desert design desk dessert detail develop diary die diet difference different difficult dinner direction dirty disappointed discover discuss disease dish distance divorce doctor document dog dollar door double doubt down download dozen drama draw drawing dream dress drink drive driver drop drug drunk dry duck during dust duty each ear early earn earth easily east easy eat edge education effect effort egg eight either elbow election electric elephant else email embarrassed emergency emotion employee empty end enemy energy engine enjoy enough enter entire environment equal error escape especially even evening event ever every everybody everyone everything everywhere exactly example excellent except exchange excited exciting excuse exercise expect expensive experience explain extra eye face fact factory fail fair fall false family famous fan fancy far farm fashion fast fat father fault favorite favourite fear feature fee feed feel feeling female fever field fifteen fifty fight figure fill film final finally find fine finger finish fire firm first fish fit five fix flag flat flight floor flower flu fly focus fold follow food foot football force foreign forest forever forget forgive fork form forty forward four free freedom freeze fresh fridge friend friendly friendship front fruit fry full fun funny furniture future gain garage garden gas gate general gentle get gift girl girlfriend give glad glass glasses go goal god gold golf gone good goodbye government grade graduate grand grandfather grandmother grandma grandpa grass grateful great green greet grey ground group grow guess guest guitar gun guy gym habit hair half hall hand handle hang happen happy hard hardly hat hate head headache health healthy hear heart heat heaven heavy height hell hello help her here hero hide high hill hire history hit hobby hold hole holiday home homework honest honey hope horrible horse hospital host hot hotel hour house however huge human hundred hungry hunt hurry hurt husband ice idea ideal ill illness image imagine important impossible improve include income increase indeed inside instead interest interested interesting internet interview invite iron island issue item jacket jeans job join joke journey joy judge juice jump junior just keep key kick kid kill kind king kiss kitchen knee knife knock know knowledge lady lake land language large last late later laugh law lawyer lay lazy lead leader learn least leave left leg lend less lesson let letter level library lie life lift light like likely limit line lion lip list listen little live local lock lonely long look lose loss lost loud love lovely low luck lucky lunch machine mad magazine mail main major make male mall man manage manager many map mark market marriage married marry match mate math maths matter maybe meal mean meaning meat medicine medium meet meeting member memory mention menu mess message metal method middle midnight might mile milk million mind minute mirror miss mistake mix mobile model modern mom moment money monkey month mood moon more morning most mother motor mountain mouse mouth move movie much mum murder muscle museum music must myself nail name narrow nation nature near nearly neck need neighbor neighbour neither nervous never new news newspaper next nice night nine nobody noise none noon normal north nose note nothing notice novel now number nurse obvious ocean offer office officer often oil old once one online only open opinion opportunity orange order ordinary other otherwise outside oven over owe own owner pack package page pain paint painting pair pants paper parent park part partner party pass passenger past path patient pay peace pen pencil people pepper perfect perhaps period person pet phone photo piano pick picture piece pig pink pity pizza place plan plane plant plastic plate play player please pleased plenty pocket poem point police polite pool poor popular position possible post pot potato pound pour power practice prefer prepare present president press pretty prevent price pride priest prince princess print prison private prize probably problem produce product program project promise proper protect proud prove public pull punch pupil purple purpose push put quality quarter queen question quick quickly quiet quit quite race radio rain raise rare rather reach read ready real realize really reason receive recent recipe record red relax relationship relative remember remind remove rent repair repeat reply report rescue respect responsible rest restaurant result return rice rich ride right ring rise risk river road rock role roll roof room root rope rough round route rule rush sad safe salad salary sale salt same sand save say scared scene school science score screen sea search season seat second secret see seem sell send senior sense sentence serious serve service settle seven several shake shame shape share sharp shave she sheep shelf shine ship shirt shock shoe shoot shop shopping short should shoulder shout show shower shut shy sick side sign silly silver simple since sing singer single sink sir sister sit situation six size skin skirt sky sleep slow small smart smell smile smoke snack snake snow soap soccer social sock sofa soft soldier solve somebody someone something sometimes somewhere son song soon sorry sort soul sound soup south space speak special speech speed spend spicy spirit sport spot spring square staff stage stairs stamp star start state station stay steak steal step stick still stomach stone stop store storm story straight strange stranger street stress stressed strong student study stuff stupid style subject succeed success such sudden sugar suggest suit summer sun sunny supermarket supper support suppose sure surprise surprised survive sweet swim system table tail take talk tall taste tax taxi tea teach teacher team tear teeth telephone television tell temperature ten tennis terrible test text thank theater thick thief thin think thirsty thirty though thought thousand threat throat through throw ticket tidy tie tiger till tiny tip tired title toast today toe together toilet tomato tomorrow tone tongue tonight tool tooth top topic total touch tough tour towel tower town toy track traffic train training travel treat tree trip trouble truck true trust truth try tube turn twelve twenty twice type ugly umbrella uncle under understand uniform university unless until upset upstairs use useful usual vacation valley value vegetable very video view village visit voice vote wait waiter wake walk wall wallet war warm wash waste watch water wave weak wealth wear weather wedding week weekend weigh weight weird welcome west wet wheel whatever whenever while white whole wide wife wild will win wind window wine winter wise wish within without woman wonder wonderful wood word work worker world worried worry worse worst worth would wound write writer wrong yard yeah year yell yellow yes yesterday yet young yourself youth zero zoo').split(' ').forEach(function (w) { COMMON[w] = 1; });
+  var KEYW = 'wish want wanna hope plan planning going gonna need needed worried anxious nervous stressed afraid scared terrified tired sick miss lost misplaced broke feel felt should would like work job live living study studying move moving abroad overseas country learn learning speak japanese english korean spanish french chinese german italian language languages better stronger improve exam exams test quiz finals thesis leaving away wallet keys bag passport purse umbrella phone laptop computer car bike console headphones tablet trip travel visit vacation holiday boss office shift career coworkers sleep rest nap grandma grandpa grandmother grandfather mom mum dad mother father brother sister family friend friends wife husband girlfriend boyfriend cousin aunt uncle son daughter kids baby dog cat puppy kitten pet become school college university tomorrow tonight weekend passed failed promoted graduated adopted fight argument gym workout guitar piano raining snowing excited'.split(' ');
+  var KEYS = null, KEYSET = {};
+  function keys() { if (KEYS) return KEYS; var seen = {}; KEYS = [[], []]; [KEYW, ASK.tools.words && ASK.tools.words.vocab ? ASK.tools.words.vocab() : []].forEach(function (L, i) { L.forEach(function (k) { k = String(k).toLowerCase(); if (k.length >= 3 && /^[a-z]+$/.test(k) && !seen[k]) { seen[k] = 1; KEYS[i].push(k); KEYSET[k] = 1; } }); }); return KEYS; }
+  var ENDS = [['s', ''], ['es', ''], ['ed', ''], ['ed', 'e'], ['d', ''], ['ing', ''], ['ing', 'e'], ['ies', 'y'], ['ied', 'y'], ['er', ''], ['ers', ''], ['ly', ''], ['y', ''], ['n', '']];
+  function isKnown(t, V) {
+    function k(w) { return !!(COMMON[w] || KEYSET[w] || V[w]); }
+    if (k(t)) return true;
+    return ENDS.some(function (e) {
+      if (t.length <= e[0].length + 2 || t.slice(-e[0].length) !== e[0]) return false;
+      var r = t.slice(0, -e[0].length) + e[1];
+      return k(r) || (r.length > 3 && r[r.length - 1] === r[r.length - 2] && k(r.slice(0, -1)));
+    });
+  }
+  var THINGV = /^(eat|eats|ate|eating|cook|cooks|cooked|cooking|drink|drinks|drank|buy|buys|bought|order|ordered|try|tried|taste|tasted|bake|baked|make|made)$/;
+  function fixTypos(p, F) { var V = F && F.vocab || {}, K = keys(); return ASK.reader.fixWords(p, K, function (t, i, all) { return isKnown(t, V) || (i > 0 && THINGV.test(all[i - 1])); }); }
+  var GW = null;
+  function gameTypo(p, F) {
+    var V = F && F.vocab || {};
+    if (!GW) { keys(); var gs = {}; guideNames(F).forEach(function (l) { l.split(' ').forEach(function (w) { if (w.length >= 4 && /^[a-z]+$/.test(w) && !COMMON[w] && !KEYSET[w]) gs[w] = 1; }); }); GW = Object.keys(gs).concat(String(GAMEW.source).replace(/^[^(]*\(|\)[^)]*$/g, '').split('|').filter(function (w) { return /^[a-z]{4,}$/.test(w); })); }
+    return ASK.reader.fixWords(p, [GW], function (t) { return isKnown(t, V); }).near.length > 0;
+  }
+  function read(A, F) { var r = read0(A, F); if (r) r.F = F; return r; }
+  function read0(A, F) {
+    var fr = match(A, F); if (!A || !A.plain) return fr;
+    var fx = fixTypos(A.plain, F); if (gameTypo(fx.text, F)) return null;
+    var A2 = {raw: fx.text, plain: fx.text, ws: fx.text.split(' '), gameish: A.gameish, allNames: A.allNames};
+    var f2 = fx.ch.length ? match(A2, F) : null; if (f2) { f2.fixed = fx.ch; return f2; }
+    if (fr) return fr;
+    if (/^(want|wanna|wanted|wish|hope|need|plan|planning|miss|going|gonna|thinking)\b/.test(fx.text)) {
+      var t3 = 'i ' + fx.text, A3 = {raw: t3, plain: t3, ws: t3.split(' '), gameish: A.gameish, allNames: A.allNames};
+      var f3 = match(A3, F); if (f3) { f3.fixed = fx.ch; return f3; }
+    }
+    return null;
+  }
+  function cap(x) { x = String(x || ''); return x.charAt(0).toUpperCase() + x.slice(1); }
+  function reply(fr) {
+    var W = ASK.tools.words, raw = String(fr.A.raw || '').replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '');
+    if (fr.c && fr.c.game) { var gs = W.turn(raw); return {L: ['So ' + esc(gs) + '. That I can help with: the guide has tips for staying alive and for builds.', 'Pick one to start:'], ask: '', topic: '', label: 'getting better at the game', chips: GAMECHIPS, said: gs}; }
+    if (fr.kind === 'should') {
+      var a = W.turn(fr.a), b = W.turn(fr.b), pair = (fr.a + ' ' + fr.b).toLowerCase(), why = '';
+      if (/\b(study|studying|review)\b/.test(pair) && /\b(sleep|rest|nap)\b/.test(pair)) why = 'Sleep helps you keep what you studied; more study helps if there are still gaps. ';
+      var q = 'Which one matters more to you right now?';
+      W.pend('frame:should', 'that choice', [q, 'What would you lose by picking the other one?'], 0);
+      return {L: ['<b>' + esc(cap(a)) + '</b> or <b>' + esc(b) + '</b>, hm. Both have a point, and I cannot decide it for you.', why + q], ask: 'tellmore', topic: 'frame:should', label: 'that choice', said: ''};
+    }
+    if (fr.kind === 'day') {
+      var dy = DAYS.filter(function (d) { return d[0].test(fr.obj); })[0];
+      W.pend('frame:day', 'your day', dy[2], 0); W.remember(W.turn(raw), 'frame:day', 'your day', '');
+      return {L: [dy[1] + ' ' + dy[2][0]], ask: 'tellmore', topic: 'frame:day', label: 'your day', said: W.turn(raw), qs: dy[2]};
+    }
+    if (fr.kind === 'weather') {
+      var wq = SHAPEQ.weather, wsd = 'it is ' + fr.obj;
+      W.pend('frame:weather', 'the weather', wq, 0); W.remember(wsd, 'frame:weather', 'the weather', '');
+      return {L: ['So ' + esc(wsd) + ' there.', wq[0]], ask: 'tellmore', topic: 'frame:weather', label: 'the weather', said: wsd, qs: wq};
+    }
+    if (fr.kind === 'should1') {
+      var sq = fr.c && fr.c.should1 || SHAPEQ.should1, sk = 'frame:' + (fr.c ? fr.c.k : 'should1');
+      W.pend(sk, 'that choice', sq, 0);
+      return {L: ['Hm, <b>' + esc(W.turn(fr.obj)) + '</b>? I cannot decide it for you, but I can think it through with you.', sq[0]], ask: 'tellmore', topic: sk, label: 'that choice', said: '', qs: sq};
+    }
+    var said = W.turn(raw).replace(/^(so |well |honestly |hmm |ok |okay )+/i, '');
+    if (fr.kind === 'wish') said = said.replace(/\byou wish you (can|will)\b/, function (m, v) { return 'you wish you ' + (v === 'can' ? 'could' : 'would'); });
+    var EVK = /^(good|bad|did|doing|cant|excited)$/.test(fr.kind), nk = fr.kind === 'news' ? (fr.c && fr.c.news ? 'news' : fr.val) : fr.kind;
+    var qs = EVK ? (fr.c && fr.c[fr.kind] || SHAPEQ[fr.kind]) : fr.kind === 'news' && fr.c ? (fr.c[nk] || fr.c.q || SHAPEQ.news) : fr.c && fr.c.q ? fr.c.q : SHAPEQ[fr.kind];
+    var key = 'frame:' + (fr.c ? fr.c.k : fr.kind), label = fr.c ? fr.c.label : 'that';
+    var tp = !fr.c && W.topic ? W.topic(fr.obj || '') : null, tf = tp && W.follow ? W.follow(tp.topic) : null;
+    if (tf && tp.word && new RegExp('\\b(a|an|another|new|own)( \\w+)? ' + tp.word + '\\b').test(fr.obj || '')) tf = null;
+    if (tf && /^(want|wish|plan|hope|need)$/.test(fr.kind)) { qs = tf.qs; key = tp.topic; label = tf.label; }
+    if (fr.kind === 'miss' && fr.c && fr.c.k !== 'people') qs = SHAPEQ.miss;
+    W.pend(key, label, qs, 0); W.remember(said, key, label, '');
+    var first = FIRST[fr.kind] ? FIRST[fr.kind] + ' ' : fr.kind === 'news' && FIRST[fr.val] ? FIRST[fr.val] + ' ' : (fr.kind === 'miss' && fr.c && fr.c.k === 'people' ? 'Missing someone is hard. ' : (fr.c && fr.c.k === 'away' ? 'That can be hard. ' : ''));
+    var also = alsoNames(fr.A && fr.A.plain || '', fr.F);
+    return {L: [first + 'So ' + esc(said) + '.', qs[0]], ask: 'tellmore', topic: key, label: label, said: said, chips: also.length ? also : null, qs: qs};
+  }
+  var MORE = {abroad: ['What kind of work do you do now?', 'Would you go alone, or with family?', 'What worries you most about living far away?'],
+    language: ['How do you practise it?', 'Do you know anyone who speaks it?', 'What is the hardest part so far?'],
+    exam: ['How do you usually study?', 'What will you do when it is over?'], work: ['How long have you been there?', 'What would make it better?'],
+    trip: ['How long will you stay?', 'Have you been there before?'], people: ['What is your favourite memory with them?', 'Do you still talk to them?'],
+    away: ['Where are they moving to?', 'Have you planned a goodbye?'], device: ['What will you use it for most?', 'Do you have a budget?'],
+    thing: ['When did you last see it?', 'Is it important to you?'], sleep: ['Do you use your phone before bed?', 'What helps you relax?'],
+    newjob: ['Is it in the same kind of work?', 'What are you most looking forward to?'], pet: ['What does it like to do?', 'Is it your first pet?'],
+    hobby: ['What would you like to be able to do with it?', 'How often do you practise?'], house: ['Will you have your own room?', 'What will you miss about the old place?'],
+    health: ['Did you see a doctor?', 'Do you have someone looking after you?'], should: ['What would you pick if nobody was watching?'], day: ['What would make tomorrow better?']};
+  var GENERIC = ['What do you think yourself?', 'Is there anything else about it on your mind?'];
+  function more(k) {
+    var c = String(k || '').replace(/^frame:/, ''), L = [], con = CONCEPTS.filter(function (x) { return x.k === c; })[0];
+    if (con && con.q) L = L.concat(con.q); L = L.concat(MORE[c] || []);
+    if (!/^frame:/.test(k) && ASK.tools.words && ASK.tools.words.follow) { var f = ASK.tools.words.follow(k); if (f) L = L.concat(f.qs); }
+    return L.concat(GENERIC);
+  }
+  ASK.tools = ASK.tools || {};
+  ASK.tools.frames = {more: more, generic: GENERIC, gameWord: function (p) { return GAMEW.test(String(p || '')); }, read: read, reply: function (fr) { try { return reply(fr); } catch (e) { ASK.err('frames: reply', e); return null; } }};
+})(typeof window !== 'undefined' ? (window.ASK = window.ASK || {}) : module.exports);</script>
+<script>(function (ASK) {
+  'use strict';
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+var R=0;function pick(a){return a[R++%a.length];}
+var TOP=`food|food|food eat eating dinner lunch breakfast lasagna spaghetti curry dumpling dumplings taco tacos burrito kimchi stew barbecue bbq omelette pancake pancakes waffle waffles donut donuts pizza burger pasta rice noodle ramen sushi cake cookie chocolate candy snack soup salad steak chicken cheese bread sandwich fries cook cooking recipe bake baking fruit apple banana coffee tea meal restaurant dessert|What is your favourite dish?|Do you cook it yourself or order it?
+family|family|family mom dad mother father brother sister parents parent grandma grandpa cousin uncle aunt kid kids baby child children son daughter wife husband|How is your family doing?|Is there a family tradition you like?
+social|friends and social life|friend friends buddy buddies party hangout dating crush boyfriend girlfriend partner relationship birthday wedding|How long have you known them?|What did you get up to together?
+work|work|job office career salary shift meeting coworker colleague manager interview resume deadline company business|How is work going lately?|What part of it takes the most out of you?
+school|school and study|school college university teacher homework exam study student lecture grade grades degree course essay assignment|What are you studying?|How are the deadlines looking?
+weather|the weather|weather rain rainy snow snowy sunny storm wind windy cloudy fog summer winter spring autumn season temperature humid|What is it like where you are?|Do you like that kind of weather?
+music|music|music song songs band singer guitar piano drum drums concert album playlist rap rock jazz pop melody lyrics violin|What have you been listening to?|Do you play anything yourself?
+screen|shows and movies|movie movies film series anime manga cartoon netflix episode actor cinema trailer sitcom drama youtube video videos streaming|What are you watching at the moment?|Would you recommend it?
+games|other games|minecraft fortnite zelda pokemon mario chess poker console playstation xbox nintendo steam esports gamer gaming roblox valorant skyrim|What do you like most about it?|Do you play it often?
+sports|sports and fitness|football soccer basketball baseball tennis golf gym workout swimming boxing hockey cricket sport sports fitness yoga|Do you play or just watch?|Who do you support?
+travel|travel|travel trip vacation holiday flight airport hotel beach mountain city country abroad passport camping hiking tour|Where is the trip?|What is the one thing you want to see?
+pets|pets and animals|dog dogs cat cats puppy kitten pet pets bird fish hamster rabbit horse animal animals zoo|What is its name?|How long have you had it?
+sleep|sleep|sleep nap bed dream dreams nightmare insomnia pillow|Are you getting enough rest?|Do you remember your dreams?
+health|health|doctor hospital medicine pain injury dentist diet healthy vitamin vitamins checkup|I hope it is nothing serious. How are you coping?|Have you been able to see someone about it?
+money|money|money rent bills price cheap expensive savings bank budget buying shopping sale broke debt paycheck wallet|Is it something you are saving for?|Was it worth the price?
+tech|tech|phone computer laptop internet wifi app apps software coding programming website keyboard battery charger tablet|What do you use it for?|Is it giving you trouble?
+books|books and writing|book books novel story stories reading author library poem poetry comic comics writing|What are you reading?|Who is your favourite author?
+art|art and making things|art draw drawing paint painting sketch design photo photography camera craft crafts sculpture|What do you like to make?|How long have you been at it?
+home|home|house home apartment room kitchen garden cleaning furniture neighbor neighbour|How is the place coming along?|What would you change about it?
+road|cars and the road|car cars bike bicycle train bus driving traffic motorcycle|Do you drive much?|Where are you headed?
+nature|nature, space and science|tree trees forest river ocean sea lake flower flowers moon sky space planet planets galaxy universe science physics chemistry maths biology history|What got you interested in it?|Do you read or watch much about it?`;
+var DEFTXT=`serendipity|finding something good by chance, without looking for it.
+ephemeral|lasting only a very short time.
+nostalgia|a wistful longing for the past.
+melancholy|a deep, lingering sadness, often with no clear cause.
+resilience|the ability to recover quickly from setbacks.
+procrastinate|to put off something you should be doing.
+paradox|a statement or situation that seems self-contradictory but may still be true.
+irony|an outcome opposite to what was expected, or words that mean the opposite of what is said.
+empathy|the ability to understand and share another person's feelings.
+sympathy|feeling sorrow for someone else's trouble.
+ambiguous|open to more than one meaning.
+ethics|principles about what is right and wrong.
+democracy|a system of government in which people choose their leaders by voting.
+inflation|a general rise in prices over time, so money buys less.
+recession|a significant decline in economic activity lasting months or more.
+budget|a plan for how much money you will earn and spend.
+mortgage|a loan used to buy property, secured by that property.
+interest|the cost of borrowing money, or what savings earn, as a percentage.
+tax|money people and businesses pay to a government.
+profit|money left after costs are taken from earnings.
+gravity|the force that pulls objects with mass toward each other, like things falling to Earth.
+photosynthesis|how plants use sunlight, water and carbon dioxide to make sugar and oxygen.
+evolution|gradual change in living things over generations through natural selection.
+algorithm|a step-by-step set of instructions for solving a problem.
+internet|a global network of connected computers that share information.
+wifi|wireless networking that connects devices to the internet.
+software|programs and data that tell a computer what to do.
+hardware|the physical parts of a computer.
+metaphor|describing one thing as another to suggest likeness, like "time is a thief".
+simile|a comparison using "like" or "as", like "brave as a lion".
+entropy|a measure of disorder; in physics it tends to increase in a closed system.
+atom|the basic unit of a chemical element.
+molecule|two or more atoms bonded together.
+cell|the basic unit of life; also a small room, as in a prison.
+dna|the molecule that carries genetic instructions in living things.
+vaccine|a medicine that trains the immune system to fight a specific disease.
+antibiotic|a medicine that kills or stops bacteria; it does not work on viruses.
+bacteria|single-celled microorganisms, some helpful and some harmful.
+virus|a tiny infectious agent that can only multiply inside living cells.
+oxygen|the gas in air that most living things need to breathe.
+volcano|an opening in the Earth's crust where molten rock, ash and gas can erupt.
+earthquake|shaking of the ground caused by movement of rock below the surface.
+tsunami|a huge ocean wave, usually caused by an underwater earthquake or landslide.
+hurricane|a large, powerful tropical storm with strong winds.
+tornado|a rotating column of air that touches the ground.
+galaxy|a huge system of stars, gas and dust held together by gravity.
+planet|a large body that orbits a star.
+comet|an icy body that grows a glowing tail near the Sun.
+asteroid|a rocky body orbiting the Sun, smaller than a planet.
+black hole|a region of space where gravity is so strong that not even light can escape.
+equator|the imaginary line around Earth halfway between the poles.
+continent|one of Earth's large landmasses.
+peninsula|land almost surrounded by water.
+island|land completely surrounded by water.
+glacier|a large, slow-moving mass of ice.
+ecosystem|a community of living things and the environment they interact with.
+climate|the typical weather of a region over many years.
+weather|the day-to-day state of the atmosphere, such as rain or sun.
+hobby|an activity you do for enjoyment in your free time.
+anxiety|worry or unease about something that might happen.
+meditation|training attention or calm, often by focusing on the breath.
+mindfulness|paying attention to the present moment without judging it.
+introvert|a person who gains energy from time alone.
+extrovert|a person who gains energy from being around others.
+optimist|someone who expects good outcomes.
+pessimist|someone who expects bad outcomes.
+coincidence|events that happen together by chance but seem connected.
+insomnia|trouble falling or staying asleep.
+hibernation|a long, sleep-like winter state some animals enter to save energy.
+caffeine|a stimulant found in coffee, tea and cocoa.
+protein|a nutrient the body needs to build and repair tissue.
+vitamin|a nutrient needed in small amounts to stay healthy.
+calorie|a unit of energy in food.
+recipe|a set of instructions for cooking a dish.
+vegetarian|someone who does not eat meat.
+vegan|someone who avoids all animal products.
+sushi|a Japanese dish of vinegared rice with fish, vegetables or egg.
+ramen|a Japanese noodle soup.
+jazz|a music style from African American communities, known for improvisation.
+symphony|a long piece of music for a full orchestra.
+orchestra|a large group of musicians playing together.
+novel|a long fictional story in book form.
+poetry|writing that uses rhythm and condensed language to express ideas and feelings.
+biography|a book about a real person's life.
+documentary|a film that presents real events or facts.
+anime|animation from Japan.
+manga|comics from Japan.
+marathon|a 42.195 km (26.2 mile) running race.
+passport|an official document that identifies you when travelling abroad.
+visa|official permission to enter or stay in a country.
+souvenir|an item kept as a reminder of a place or trip.
+philosophy|the study of basic questions about existence, knowledge and ethics.
+psychology|the study of the mind and behaviour.
+economics|the study of how people produce, trade and use resources.
+biology|the study of living things.
+chemistry|the study of matter and how substances change.
+physics|the study of matter, energy and forces.
+geometry|the branch of maths about shapes, sizes and space.
+algebra|the branch of maths that uses letters for unknown numbers.
+calculus|the branch of maths about change and accumulation.
+probability|how likely something is to happen, from 0 to 1.
+percentage|a number expressed as parts per hundred.
+average|the sum of values divided by how many there are.
+median|the middle value when numbers are sorted.
+prime number|a number greater than 1 divisible only by 1 and itself.
+pi|the ratio of a circle's circumference to its diameter, about 3.14159.
+quantum|the smallest discrete amount of something; quantum physics studies very small particles.
+robot|a machine that can carry out tasks automatically.
+encryption|scrambling data so only someone with the key can read it.
+password|a secret word or phrase used to prove your identity.
+bug|a small insect, or a mistake in software that makes it misbehave.
+cloud|a mass of water droplets in the sky; also computing services run on remote servers.
+ai|short for artificial intelligence: computer systems doing tasks that normally need human intelligence.`;
+var TOPICS=[],WT={},DEFS={};
+function vars(w){var o=[w];if(w.length>3){if(/ies$/.test(w))o.push(w.slice(0,-3)+'y');if(/es$/.test(w))o.push(w.slice(0,-2));if(/s$/.test(w))o.push(w.slice(0,-1));if(/ing$/.test(w)){o.push(w.slice(0,-3));o.push(w.slice(0,-3)+'e');}if(/ed$/.test(w)){o.push(w.slice(0,-2));o.push(w.slice(0,-1));}}return o;}
+function look(m,w){var v=vars(w);for(var i=0;i<v.length;i++)if(Object.prototype.hasOwnProperty.call(m,v[i]))return m[v[i]];return null;}
+function addW(t,s){String(s).split(' ').forEach(function(w){if(w)WT[w]=t;});}
+function addDefs(s){String(s).split('\n').forEach(function(l){var i=l.indexOf('|');if(i>0)DEFS[l.slice(0,i).trim().toLowerCase()]=l.slice(i+1).trim();});}
+TOP.split('\n').forEach(function(l){var p=l.split('|');if(p.length<5)return;var t={k:p[0],label:p[1],qs:[p[3],p[4]],n:0};TOPICS.push(t);addW(t,p[2]);});
+addDefs(DEFTXT);
+function topicOf(ws){var hit={},best=null,bn=0,word='';ws.forEach(function(w){var t=look(WT,w);if(t){hit[t.k]=(hit[t.k]||0)+1;if(hit[t.k]>bn){bn=hit[t.k];best=t;word=w;}}});return best?{t:best,w:word}:null;}
+var FN=false;
+function termOf(p){FN=false;var s=p.replace(/\s+(mean|means|meaning)$/,''),m=/^(what is the (meaning|definition) of|what do you mean by|what is|what are|what does|whats|define|definition of|meaning of|explain|tell me about)\s+/.exec(s);if(!m)return '';s=s.slice(m[0].length).replace(/^(an?|the)\s+/,'');if(m[1]==='what does'&&/\s+(do|does|work|works)$/.test(s)){FN=true;s=s.replace(/\s+(do|does|work|works)$/,'');}if(s.split(' ').length>3)return '';if(s.indexOf(' ')>0&&(POS.test(s)||NEG.test(s)))return '';return s;}
+function defOf(term){if(Object.prototype.hasOwnProperty.call(DEFS,term))return {k:term,d:DEFS[term]};var ws=term.split(' '),last=ws.pop(),v=vars(last);for(var i=1;i<v.length;i++){var k=ws.concat([v[i]]).join(' ');if(Object.prototype.hasOwnProperty.call(DEFS,k))return {k:k,d:DEFS[k]};}return null;}
+var POS=/\b(good|great|fun|amazing|awesome|nice|favou?rite|best|wonderful|cool|lovely|delicious|excellent)\b/,NEG=/\b(bad|awful|boring|terrible|annoying|worst|gross|horrible|disappointing|rough)\b/;
+function plan(tn,A,lines){
+  if(!/^(statement|question|like)$/.test(tn.act))return null;
+  if(A.gameish||A.allNames.length)return null;
+  var tp=topicOf(A.ws),L=[],ask='',info='',t,x,q,topic=null;
+  var term=tn.act==='question'?termOf(A.plain):'',fn=FN,keepEx=false;
+  if(term){var d=defOf(term);
+    if(d){L=['<b>'+esc(d.k)+'</b>: '+esc(d.d),'<span style="opacity:.7">From my small offline word list (general English, not from the guide).</span>'];info='definition of '+d.k;}
+    else if(fn){return null;}
+    else{keepEx=true;L=['I do not have <b>'+esc(term)+'</b> in my small offline word list'+(tp?', though it looks like it belongs with '+esc(tp.t.label)+'.':'.'),'I cannot look anything up online, so I will not guess a meaning.'];info='word not in list';}
+  }else if(tp){t=tp.t;x='<b>'+esc(tp.w)+'</b>';var qi=t.n++%2;q=t.qs[qi];ask='tellmore';info='topic: '+t.label+' (word: '+tp.w+')';
+    var mood=POS.test(A.plain)?pick(['That sounds good.','Nice.']):NEG.test(A.plain)?pick(['That sounds rough.','Ugh, fair enough.']):'';
+    if(tn.act==='question')L=['Good question about '+x+'. I only hold Buriedbornes 2 data and a small word list, so I will not guess an answer.','Tell me your take, though. '+q];
+    else if(tn.act==='like')L=lines.slice(0,-1).concat([q]);
+    else L=[(mood?mood+' ':'')+pick(['Ah, '+x+'. We are on the subject of '+t.label+'.','Okay, '+x+'. So this is about '+t.label+'.','Got it, '+x+'. That is '+t.label+' talk.']),q];
+    topic=t.k;
+  }else return null;
+  CUR=topic?{t:t,asked:[qi],at:Date.now()}:null;
+  var dd=term?defOf(term):null,rt=dd?dd.k:(term?term:(tp?tp.w:'')),rw=dd?'I answered from my small offline word list: general English, not from the guide. The Ask box found nothing about it in the guide.':(term?'I looked for "'+term+'" in my small offline word list and the Ask box found nothing about it in the guide, so I did not guess a meaning.':'I matched the word "'+(tp?tp.w:'')+'" to the everyday topic "'+(tp?tp.t.label:'')+'" in my small offline word list and asked a follow-up. No game facts were used.');
+  return {L:L,keepEx:keepEx,info:info,ask:ask,topic:topic,rec:{topic:rt,why:rw}};}
+var CUR=null,SAID=[];
+var SAYQ=[[/^(?:What|Who) is your favou?rite (.+)\?$/,'your favourite $1 is'],[/^What are you (\w+ing)(?: at the moment)?\?$/,'you are $1'],
+  [/^What have you been (\w+ing)( to)?\?$/,'you have been $1$2'],[/^What is its name\?$/,'its name is'],[/^Where is the trip\?$/,'the trip is to'],
+  [/^Who do you support\?$/,'you support'],[/^What do you like to make\?$/,'you like to make'],[/^What do you like most about it\?$/,'what you like most is'],
+  [/^What do you use it for\?$/,'you use it for'],[/^Where are you headed\?$/,'you are headed to'],[/^What is the one thing you want to see\?$/,'you want to see']];
+var SWAP={i:'you',im:'you are',ive:'you have',me:'you',my:'your',mine:'yours',myself:'yourself',
+  we:'you',our:'your',ours:'yours',us:'you',ourselves:'yourselves',am:'are'};
+var APOS={"i'm":'you are',"i've":'you have',"i'll":'you will',"i'd":'you would'};
+var HEDGE=/^(?:(?:yes|yeah|yep|yup|no|nope|nah|probably|maybe|definitely|hmm+|um+|uh+|well|oh|honestly|i think|i guess|i'?d say|i would say|it is|it'?s)[,!.\s]+)+/i;
+function turn(raw){var prevW='';return String(raw).split(' ').map(function(tok){var t0=tok.toLowerCase().replace(/[\u2018\u2019]/g,"'").replace(/[^a-z']/g,''),k=t0.replace(/'/g,'');
+    if(APOS[t0]){prevW=k;return APOS[t0];}
+    if(k==='was'&&prevW==='i'){prevW=k;return 'were';}prevW=k;return Object.prototype.hasOwnProperty.call(SWAP,k)?SWAP[k]:tok;}).join(' ');}
+function capf(x){return x.charAt(0).toUpperCase()+x.slice(1);}
+function fresh(){return !!CUR&&(Date.now()-CUR.at)<150000;}
+function lastQ(){return CUR.t.qs[CUR.asked[CUR.asked.length-1]];}
+function canAnswer(k){return fresh()&&CUR.t.k===k;}
+function sayBack(A){var r0=String(A.raw||'').replace(/\s+/g,' ').trim().replace(/[.!]+$/,''),raw=r0.replace(HEDGE,'').trim()||r0,q=lastQ(),said='',L='';
+  var ws=raw.toLowerCase().replace(/['\u2018\u2019]/g,'').replace(/[^a-z0-9 ]+/g,' ').trim().split(/\s+/);
+  var first=ws.some(function(w){return /^(i|im|ive|id|me|my|mine|myself|we|our|us)$/.test(w);}),you=ws.some(function(w){return /^(you|your|youre|yours)$/.test(w);});
+  if(first&&!you){var out=turn(raw);said=out;L='So '+esc(out)+'.';}
+  else{var x=raw,sh=x.split(' ').length<=5&&!you&&!/^(yes|yeah|yep|no|nope|nah)\b/i.test(x),tm=null;
+    if(sh)SAYQ.some(function(r){var m=r[0].exec(q);if(m){tm=q.replace(r[0],r[1]);return true;}return false;});
+    if(tm){said=tm+' '+x;L='So '+esc(tm)+' <b>'+esc(x)+'</b>.';}
+    else{said=x;L=pick(['<b>'+esc(capf(x))+'</b>, got it.','Ah, <b>'+esc(x)+'</b>.','<b>'+esc(capf(x))+'</b>, noted.']);}}
+  var mood=POS.test(A.plain||'')?pick(['That sounds good.','Nice.','Sounds great.']):NEG.test(A.plain||'')?pick(['That sounds rough.','Ugh, fair enough.']):'';
+  return {line:L+(mood?' '+mood:''),said:said};}
+function answer(A){if(!fresh())return null;var t=CUR.t,q=lastQ(),b=sayBack(A),L=[b.line],ask='';
+  if(b.said){SAID=SAID.filter(function(x){return x.q!==q;});SAID.push({k:t.k,label:t.label,q:q,said:b.said});if(SAID.length>12)SAID.shift();}
+  var left=[0,1].filter(function(i){return CUR.asked.indexOf(i)<0&&!!t.qs[i];});
+  if(left.length){CUR.asked.push(left[0]);CUR.at=Date.now();L.push(t.qs[left[0]]);ask='tellmore';}
+  else{L.push(pick(['Thanks for telling me about it.','Good to know, thanks for sharing.'])+' I will keep it in mind while the page is open. Ask me anything about the game whenever you like.');CUR=null;}
+  return {L:L,ask:ask,topic:ask?t.k:'',label:t.label,info:'your answer to: '+q};}
+var QSTOP=set('what whats is are the you your yours do does did or it its how have has been about with for this that there any anything think much more most just really will would can could was were and yourself thing things one want like get got some still now right');
+function set(s){var o={};s.split(' ').forEach(function(x){if(x)o[x]=1;});return o;}
+function wroot(w){return w.length>4?w.replace(/(ing|ed|es|s)$/,''):w;}
+function overlaps(A){if(!fresh())return false;var Q={};lastQ().toLowerCase().replace(/[^a-z ]+/g,' ').split(/\s+/).forEach(function(w){if(w.length>=3&&!QSTOP[w])Q[wroot(w)]=1;});
+  return (A.ws||[]).some(function(w){return (w.length>=3&&!QSTOP[w]&&Q[wroot(w)])||look(WT,w)===CUR.t;});}
+function pend(key,label,qs,i){CUR={t:{k:key,label:label,qs:qs,n:0},asked:[i||0],at:Date.now()};}
+function remember(said,key,label,q){if(!said)return;SAID=SAID.filter(function(x){return x.said!==said;});SAID.push({k:key,label:label,q:q||'',said:said});if(SAID.length>12)SAID.shift();}
+function told(){return SAID.map(function(x){return x.said;});}
+  ASK.tools = ASK.tools || {};
+  ASK.tools.words = {plan: plan, canAnswer: canAnswer, answer: answer, told: told, turn: turn, overlaps: overlaps, pend: pend, remember: remember, addDefs: addDefs,
+    vocab: function () { return Object.keys(WT).concat(Object.keys(DEFS)); },
+    addWords: function (k, s) { for (var i = 0; i < TOPICS.length; i++) if (TOPICS[i].k === k) { addW(TOPICS[i], s); return true; } return false; },
+    define: function (w) { return defOf(String(w).toLowerCase()); },
+    topic: function (s) { var r = topicOf(String(s).toLowerCase().split(/[^a-z0-9]+/)); return r ? {topic: r.t.k, word: r.w} : null; },
+    follow: function (k) { for (var i = 0; i < TOPICS.length; i++) if (TOPICS[i].k === k) return {label: TOPICS[i].label, qs: TOPICS[i].qs.slice()}; return null; },
+    size: function () { return {topics: TOPICS.length, words: Object.keys(WT).length, definitions: Object.keys(DEFS).length}; }};
+})(typeof window !== 'undefined' ? (window.ASK = window.ASK || {}) : module.exports);</script>
+<script>(function (ASK) {
+  'use strict';
+  var F = null, G = null;
+  function setup(f) { if (f && f !== F) { F = f; G = null; } return !!F; }
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function N(s){return ASK.reader.clean(s);}
+function list(a){a=a.map(function(x){return '<b>'+esc(x)+'</b>';});return a.length<2?a.join(''):a.slice(0,-1).join(', ')+' and '+a[a.length-1];}
+function plural(n,w,ws){return n+' '+(n===1?w:(ws||w+'s'));}
+var SLOTS=['weapon','armor','accessory','skill'];
+function data(){if(G)return G;G={places:[],items:{},kb:[]};
+  F.places.forEach(function(fp){var p={name:fp.name,type:fp.type,cells:{}};G.places.push(p);
+    SLOTS.forEach(function(s){p.cells[s]=[fp.cells[s][0].slice(),fp.cells[s][1].slice()];
+      [0,1].forEach(function(k){p.cells[s][k].forEach(function(n){var key=n+'|'+s,it=G.items[key]||(G.items[key]={name:n,slot:s,at:[]});it.at.push({p:p,star:k?7:6});});});});});
+  G.kb=F.kb.map(function(e){return [e.kind,e.name,e.text];});
+  return G;}
+function bossesOf(it){var seen={},o=[];it.at.forEach(function(a){if(a.p.type!=='Special'&&!seen[a.p.name]){seen[a.p.name]=1;o.push(a.p);}});return o;}
+function detail(name){var ID=F.itemDefs;if(!ID)return null;return ID[name]||ID[name+'::weapon']||ID[name+'::armor']||ID[name+'::accessory']||null;}
+function lineNames(name){var d=detail(name);if(!d)return [];return (d.abilities||(d.ability?[d.ability]:[])).map(function(a){return a.name;}).concat((d.stats||[]).map(function(s){return s.name;}));}
+var TYPEL={Dungeon:'dungeon',Disaster:'disaster',Conquest:'conquest'};
+function sayItem(name,slot,star){var g=data(),it=g.items[name+'|'+slot];
+  var what=star+'★ '+(slot==='armor'?'armor piece':slot);
+  if(!it)return null;
+  var bs=bossesOf(it),sp=it.at.some(function(a){return a.p.type==='Special';});
+  if(!bs.length)return sp?'<b>'+esc(name)+'</b> is a '+what+' that no boss drops: the guide only lists it under the special dungeons.':null;
+  var by={Dungeon:[],Disaster:[],Conquest:[]};bs.forEach(function(p){by[p.type].push(p.name);});
+  var parts=['Dungeon','Disaster','Conquest'].filter(function(t){return by[t].length;}).map(function(t){return plural(by[t].length,TYPEL[t])+(by[t].length<=2?' ('+by[t].join(', ')+')':'');});
+  var s='<b>'+esc(name)+'</b> is a '+what+' on '+plural(bs.length,'boss list')+': '+(parts.length>1?parts.slice(0,-1).join(', ')+' and '+parts[parts.length-1]:parts[0])+'.';
+  var peers=Object.keys(g.items).map(function(k){return g.items[k];}).filter(function(x){return x.slot===slot&&x.at.some(function(a){return a.star===star&&a.p.type!=='Special';});}).map(function(x){return bossesOf(x).length;});
+  if(peers.length>4){var mn=Math.min.apply(null,peers),mx=Math.max.apply(null,peers),avg=peers.reduce(function(a,b){return a+b;},0)/peers.length,n=bs.length,av=Math.round(avg);
+    var one=star+'★ '+{weapon:'weapon',armor:'armor piece',accessory:'accessory',skill:'skill'}[slot],w=star+'★ '+{weapon:'weapons',armor:'armor pieces',accessory:'accessories',skill:'skills'}[slot];
+    if(n===mn)s+=' No other '+one+' is on fewer lists, so fewer bosses can give it to you.';
+    else if(n===mx)s+=' No other '+one+' is on more lists.';
+    else if(n<=avg*0.6)s+=' That is fewer than most '+w+', which are on about '+av+'.';
+    else if(n>=avg*1.4)s+=' That is more than most '+w+', which are on about '+av+'.';
+    else s+=' That is about usual for '+w+' (about '+av+' each).';}
+  return s;}
+function saySkill(name,text){var t=text||'',m=/Uses\s+max\s+(\d+)\s+uses?,\s+each cast uses\s+(\d+)/i.exec(t),c=/Cooldown\s+(\d+)\s+turns?/i.exec(t),s='';
+  if(c&&+c[1]>=99)c=null;
+  if(m&&+m[2]>0&&+m[2]<=+m[1]&&+m[2]<99){var casts=Math.floor(+m[1]/+m[2]);s='With '+m[1]+' uses and '+m[2]+' per cast, <b>'+esc(name)+'</b> gives you '+plural(casts,'cast')+' before it runs out';}
+  if(c)s+=(s?', and after each one':'After each use, <b>'+esc(name)+'</b>')+' it needs '+plural(+c[1],'turn')+' to cool down';
+  if(s)s+='.';
+  var g=data(),it=g.items[name+'|skill'];if(it){var bs=bossesOf(it);if(bs.length)s+=(s?' It is on ':'<b>'+esc(name)+'</b> is on ')+plural(bs.length,'boss list')+' in the guide.';}
+  return s||null;}
+function sayPlace(name){var g=data(),p=g.places.filter(function(x){return x.name===name;})[0];if(!p)return null;
+  var n6=0,n7=0,s7=[];SLOTS.forEach(function(s){n6+=p.cells[s][0].length;n7+=p.cells[s][1].length;s7=s7.concat(p.cells[s][1]);});
+  if(p.type==='Special'&&(/crystal beach/i.test(name)||(!n6&&!n7)))return '<b>'+esc(name)+'</b> does not drop 6★ or 7★ gear or skill books; its rare items are in its Loot instead.';
+  var s='<b>'+esc(name)+'</b> is '+(p.type==='Special'?'a special dungeon whose table lists':'a '+TYPEL[p.type]+' boss with')+' '+n6+' items at 6★ and '+n7+' at 7★.';
+  if(p.type!=='Special'&&s7.length&&s7.length<=4)s+=' Its 7★ pieces are '+list(s7)+'.';
+  if(p.type!=='Special'){var only=[];SLOTS.forEach(function(sl){p.cells[sl][0].concat(p.cells[sl][1]).forEach(function(n){var it=g.items[n+'|'+sl];if(it&&bossesOf(it).length===1&&only.indexOf(n)<0)only.push(n);});});
+    if(only.length===1)s+=' One of its items drops at no other boss: '+list(only)+'.';
+    else if(only.length)s+=' '+only.length+' of its items drop at no other boss: '+list(only.slice(0,4))+(only.length>4?' and more':'')+'.';
+    else s+=' Everything it drops can also be found at other bosses.';}
+  return s;}
+function gearWith(test){var o=[],seen={};if(!F.itemDefs)return o;
+  Object.keys(F.itemDefs).forEach(function(k){var nm=k.replace(/::(weapon|armor|accessory|skill)$/,'');if(seen[nm])return;
+    if(lineNames(nm).some(test)){seen[nm]=1;o.push(nm);}});return o;}
+function star7(nm){var g=data();return SLOTS.some(function(s){var it=g.items[nm+'|'+s];return it&&it.at.some(function(a){return a.star===7;});});}
+function sayStat(name){var st=F.statDefs&&F.statDefs[name];if(!st)return null;var w=N(name);
+  var gear=gearWith(function(l){return N(l)===w||String(l).split('+').some(function(x){return N(x)===w;});}),k7=gear.filter(star7).length;
+  var mx=/upper limit probability (\d+)%|Max:\s*\+?(\d+)%/i.exec(st.description||'');
+  var s='<b>'+esc(name)+'</b> is a stat you get from gear'+(gear.length?': '+plural(gear.length,'piece')+' in the guide '+(gear.length===1?'carries':'carry')+' it'+(k7?', '+k7+' of them at 7★':''):'')+'.';
+  if(mx)s+=' It tops out at '+(mx[1]||mx[2])+'%.';
+  return s;}
+function plainD(s){return String(s||'').replace(/\{\{([^}|]+)(?:\|([^}|]+))?[^}]*\}\}/g,function(m,a,b){return b||a;}).replace(/\[\[|\]\]|%%|~~|@@|\^\^|\$\$|##/g,'').replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim();}
+function sayTerm(name){var t=F.termDefs&&F.termDefs[name];if(!t)return null;var d=plainD(t.description);
+  var m=/^(\w+) Damage over Time\.?$/i.exec(d),s='';
+  if(m)s='<b>'+esc(name)+'</b> hurts a little every turn instead of all at once, and that damage counts as '+m[1].toLowerCase()+'.';
+  var re=new RegExp('(^|[^a-z])'+name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'([^a-z]|$)','i'),gear=gearWith(function(l){return re.test(l);});
+  if(gear.length)s+=(s?' ':'<b>'+esc(name)+'</b> shows up on gear: ')+plural(gear.length,'piece')+' in the guide '+(gear.length===1?'mentions it in its effects':'mention it in their effects')+(gear.length<=3?' ('+gear.join(', ')+')':', for example '+gear.slice(0,2).join(' and '))+'.';
+  return s||null;}
+function kbRow(kind,name){var g=data(),K={contract:'Contract',race:'Race',job:'Job',origin:'Origin'}[kind];return g.kb.filter(function(e){return e[0]===K&&N(e[1])===N(name);})[0]||null;}
+function sayContract(name){var e=kbRow('contract',name);if(!e)return null;var p=String(e[2]).split(' | '),rar=(p[0]||'').trim(),loc=(p[3]||'').trim(),cont=(p[1]||'').trim();
+  var m=/^(Runes|Skills|Skill|Equipment Parts|Equipment):\s*(.+)$/.exec(cont),s='<b>'+esc(name)+'</b> is a '+esc(rar)+' contract'+(loc?' you get from '+esc(loc):'')+'.';
+  if(m){var body=m[2],ex=/\s+(Rune Slot Release.*|Enhanced \w+ Reroll \+\d+|Remove Equipment Abilities|Willpower.*)$/.exec(body),main=ex?body.slice(0,ex.index):body;
+    var n=main.split(',').filter(function(x){return x.trim();}).length,kind={Runes:'rune',Skills:'skill',Skill:'skill','Equipment Parts':'equipment part',Equipment:'equipment'}[m[1]];
+    s+=' Equipped at the start of a run, it adds '+plural(n,kind+' recipe')+(ex?', plus '+esc(ex[1].replace(/\s+\d★$/,''))+'.':'.');}
+  return s;}
+function stats(e){var f=/(?:^|; )Stats: ([^;]+)/.exec(e[2])||/^Stats: ([^;]+)/.exec(e[2]),o={};if(!f)return o;f[1].replace(/\b(STR|DEX|INT|PIE|HP) (\d+)/g,function(_,k,v){o[k]=+v;});return o;}
+function sayKind(kind,name){var e=kbRow(kind,name);if(!e)return null;var st=stats(e),keys=['STR','DEX','INT','PIE'].filter(function(k){return st.hasOwnProperty(k);});if(!keys.length)return null;
+  var mx=Math.max.apply(null,keys.map(function(k){return st[k];})),top=keys.filter(function(k){return st[k]===mx;});
+  var s='<b>'+esc(name)+'</b> is a '+kind+' whose best starting '+(top.length>1?'stats are ':'stat is ')+top.join(' and ')+' ('+mx+(top.length>1?' each':'')+').';
+  var all=data().kb.filter(function(x){return x[0]===e[0];}).map(stats),best=[];
+  keys.forEach(function(k){var vals=all.map(function(o){return o[k]||0;});if(st[k]>0&&st[k]===Math.max.apply(null,vals)&&vals.filter(function(v){return v===st[k];}).length===1)best.push(k);});
+  if(best.length)s+=' No other '+kind+' starts with more '+best.join(' or ')+'.';
+  return s;}
+function sayFor(o){var t=o.title,k=String(o.kind||'').trim().toLowerCase(),m;
+  if(!t)return null;
+  if((m=/^([67])★ (weapon|armor|accessory)$/.exec(k)))return sayItem(t,m[2],+m[1]);
+  if((m=/^([67])★ skill$/.exec(k))&&/Drops from \d+ boss/.test(o.text||''))return sayItem(t,'skill',+m[1]);
+  if(/^(\d★ )?skill$/.test(k))return saySkill(t,o.text);
+  if(/^(dungeon|disaster|conquest|special dungeon)$/.test(k))return sayPlace(t);
+  if(k==='stat')return sayStat(t);
+  if(k==='term')return sayTerm(t);
+  if(k==='contract')return sayContract(t);
+  if(/^(race|job|origin)$/.test(k))return sayKind(k,t);
+  return null;}
+  ASK.tools = ASK.tools || {};
+  ASK.tools.say = {line: function (o, f) {
+    if (!o || !setup(f || (ASK.facts && ASK.facts.get()))) return null;
+    try { return sayFor(o); } catch (e) { ASK.err('say: ' + (o.kind || '') + ' ' + (o.title || ''), e); return null; }
+  }};
+})(typeof window !== 'undefined' ? (window.ASK = window.ASK || {}) : module.exports);</script>
+<script>(function (ASK) {
+  'use strict';
+  function cut(s, n) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, n); }
+  function record(o) {
+    if (!o) return null;
+    var t = cut(o.topic, 60);
+    if (!t) return null;
+    return {topic: t, name: t, why: cut(o.why, 440)};
+  }
+var SMALL=/(\bguide|assistant)$|^(anything else|I only know|what I can and cannot)/i;
+function hint(l){var s=l.toLowerCase();
+  if(/^stat$/.test(s))return 'a stat entry';
+  if(/^term$/.test(s))return 'a term entry';
+  if(/★\s*(weapon|armor|accessory|skill|rune)/.test(s))return 'an entry for that piece or skill';
+  if(/computed/.test(s))return 'a calculated result';
+  if(/estimate/.test(s))return 'partly an estimate, not all checked';
+  if(/verified/.test(s))return 'marked as checked rules';
+  if(/formula status/.test(s))return 'a note on whether the formula is known yet';
+  if(/skill data/.test(s))return 'taken from the skill data';
+  if(/^\d+ match/.test(s))return 'the closest matches I found';
+  return '';}
+function reason(items,A){if(!A||A.kind==='chat'||!A.topic)return undefined;
+  var cards=[],pre='',online=false,i,ch,c;
+  for(i=0;i<items.length;i++){ch=items[i];c=null;
+    if('note' in ch){var nn=ch.note;if(!pre&&/^(Showing results for|Closest match|Understood as)/i.test(nn))pre=nn.replace(/[.\s]+$/,'');continue;}
+    if('sub' in ch){var sl=ch.sub,key=ch.key;
+      if(/^online$/i.test(sl)){online=true;continue;}
+      if(SMALL.test(sl))return undefined;
+      if(/Tell me a bit more|Outside this guide/.test(ch.title))return undefined;
+      c={key:key,t:sl?key.replace(/^Built for:\s*/,'the ')+(/^Built for:/.test(key)?' build':''):ch.title,l:sl};}
+    else{var nx=ch.noteText||'',k=nx.split(' · ');
+      if(k.length<2||!/verified|estimate|rule|example|status/i.test(k.slice(1).join(' ')))continue;
+      c={key:k[0].replace(/[?!.\s]+$/,'').trim(),t:k[0].replace(/[?!.\s]+$/,'').trim(),l:k.slice(1).join(' · ')};}
+    cards.push(c);}
+  if(!cards.length)return undefined;
+  var c0=cards[0];if(!(A.name===c0.key||A.topic===c0.key||(c0.key&&A.topic.indexOf(c0.key)===0)))return undefined;
+  var tail=(pre?' Before the card the page said “'+pre+'”.':'')+(online?' A “Smart answer” card from the online AI is also shown; that part is not read straight from the guide, so check it.':'');
+  var n=Math.min(3,cards.length),head='';
+  for(;n>=1;n--){var ps=cards.slice(0,n).map(function(x,j){var h=x.l?hint(x.l):'';return (cards.length>1?'Card '+(j+1)+': ':'')+x.t.slice(0,40)+(x.l?', labelled “'+x.l.slice(0,50)+'”'+(h?' ('+h+')':''):'');});
+    head='I answered from the guide’s own cards. '+ps.join('; ')+'.';if(head.length+tail.length<=440)break;}
+  return (head+tail).slice(0,440);}
+  ASK.tools = ASK.tools || {};
+  ASK.tools.why = {record: record, reason: function (items, A) {
+    try { return reason(items || [], A); } catch (e) { ASK.err('why: reason', e); return undefined; }
+  }};
+})(typeof window !== 'undefined' ? (window.ASK = window.ASK || {}) : module.exports);</script>
+<script>(function (ASK) {
+  'use strict';
   var W = typeof window !== 'undefined' ? window : null;
   function E(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
   function part(p) {
@@ -13816,7 +14322,7 @@ function custom(raw){var p=nz(raw).trim(),w=p?p.split(' ').length:0;if(!p||w>10)
     if ('item' in p) return '<span class="item qa-chip s' + (p.star || 6) + '" data-item="' + E(p.item) + '" data-slot="' + E(p.slot || '') + '">' + E(p.item) + '</span>';
     if ('place' in p) return '<a href="#" class="idx-link qa-chip qa-boss" data-q="' + E(p.place) + '">' + E(p.place) + '</a>';
     if ('star' in p) return '<span class="qa-star s' + p.star + '">' + p.star + '★</span>';
-    if ('loot' in p) return '<span class="qa-chip s7">' + E(p.loot) + '</span>';
+    if ('loot' in p) return '<span class="qa-chip s7" data-lt="' + E(p.loot) + '"' + (p.from ? ' data-lb="' + E(p.from) + '"' : '') + '>' + E(p.loot) + '</span>';
     if ('lootopen' in p) return '<a href="#" class="qa-chip qa-boss" data-lootopen="' + E(p.lootopen) + '">Open its Loot</a>';
     if ('none' in p) return '<span class="qa-none">none listed</span>';
     return '';

@@ -301,7 +301,10 @@ td.dungeon .boss-loot{display:block;margin-top:2.1em;color:#edb72a;-webkit-text-
 .ld-cat{text-align:right;color:#17e517;font-size:18px;margin-bottom:4px}
 .ld-main{color:#fff;font-size:19px;line-height:1.35;margin:0 0 14px;white-space:pre-line}
 .ld-note{color:#d0d0d0;font-size:13.5px;line-height:1.4;margin:0}
-#qaOut.qa-settling{opacity:0}</style>
+#qaOut.qa-settling{opacity:0}
+#qaOut.qa-under{position:absolute;pointer-events:none}
+.qa-hold{pointer-events:none}
+#askBox.qa-full .qa-hold{order:2;margin-top:10px}</style>
 </head>
 <body>
 <header>
@@ -10390,10 +10393,12 @@ function dist(a,b,lim){
 function limit(len){return len<5?0:len<=7?1:len<=14?2:3;}
 var RN=null;
 function renamed(q){
-  if(!RN){RN=[];try{var R=W.ASK&&W.ASK.facts?W.ASK.facts.get().renamed||{}:{};Object.keys(R).forEach(function(o){
-    RN.push([new RegExp('(^|[^A-Za-z0-9])'+o.replace(/[^A-Za-z0-9]+/g,'[^A-Za-z0-9]*')+'(?![A-Za-z0-9])','gi'),R[o]]);});}catch(e){RN=[];}}
-  RN.forEach(function(r){r[0].lastIndex=0;q=q.replace(r[0],function(m,p){return p+r[1];});});
-  return q;}
+  if(RN===null){RN=false;try{var R=W.ASK&&W.ASK.facts?W.ASK.facts.get().renamed||{}:{},M={},P=[];Object.keys(R).forEach(function(o){
+    var k=o.toLowerCase().replace(/[^a-z0-9]+/g,'');if(!k)return;M[k]=R[o];P.push(o.replace(/[^A-Za-z0-9]+/g,'[^A-Za-z0-9]*'));});
+    if(P.length)RN={re:new RegExp('(^|[^A-Za-z0-9])('+P.join('|')+')(?![A-Za-z0-9])','gi'),m:M};}catch(e){RN=false;}}
+  if(!RN)return q;
+  RN.re.lastIndex=0;
+  return q.replace(RN.re,function(x,p,o){var n=RN.m[o.toLowerCase().replace(/[^a-z0-9]+/g,'')];return p+(n||o);});}
 function fix(q){
   q=renamed(String(q==null?'':q));
   var re=/[A-Za-z0-9‘’']+/g,T=[],m;
@@ -11013,11 +11018,25 @@ function wrongFold(){var c=S.last;if(!c||!inp||inp.value!==c.raw||S.wrongFor===c
   if(!out.querySelector('.qa-card')||out.querySelector('[data-wrong],[data-ft],[data-core2="fix"],[data-core2="unknown"],[data-share]'))return;
   var h='';try{h=W.ASK&&W.ASK.wrong?W.ASK.wrong(c.raw,c.shown||'',c.shownKind||''):'';}catch(e){h='';}
   if(h)out.insertAdjacentHTML('beforeend',h);}
-function settling(){if(!out)return;out.classList.add('qa-settling');clearTimeout(S.rv);S.rv=setTimeout(shown,1500);}
-function shown(){clearTimeout(S.rv);if(out)out.classList.remove('qa-settling');}
+function hold(){if(!out||S.hold||!out.firstElementChild||out.classList.contains('qa-settling'))return;
+  try{var h=out.cloneNode(true);h.removeAttribute('id');h.removeAttribute('aria-live');
+    [].forEach.call(h.querySelectorAll('[id]'),function(e){e.removeAttribute('id');});
+    h.classList.add('qa-hold');h.setAttribute('aria-hidden','true');h.setAttribute('inert','');
+    var w=out.getBoundingClientRect().width;out.parentNode.insertBefore(h,out.nextSibling);S.hold=h;
+    if(w)out.style.width=w+'px';out.classList.add('qa-under');}catch(e){unhold();}}
+function unhold(){var h=S.hold;S.hold=null;try{if(h&&h.parentNode)h.parentNode.removeChild(h);}catch(e){}
+  if(out&&out.classList.contains('qa-under')){out.classList.remove('qa-under');out.style.width='';}}
+function settling(){if(!out)return;hold();out.classList.add('qa-settling');clearTimeout(S.rv);S.rv=setTimeout(shown,1500);}
+function shown(){clearTimeout(S.rv);if(out)out.classList.remove('qa-settling');unhold();}
 QA.settling=settling;
 function settle(){try{addOn();}catch(e){}try{commit();}catch(e){}try{if(W.__qaPolish)W.__qaPolish(out);}catch(e){}try{wrongFold();}catch(e){}shown();}
-if(out&&typeof MutationObserver!=='undefined')new MutationObserver(function(){clearTimeout(S.tm);S.tm=setTimeout(settle,160);}).observe(out,{childList:true,subtree:true});
+var SMO=null,SN=[];
+function settleNow(){S.inSettle=true;try{settle();}catch(e){}finally{try{if(SMO)SMO.takeRecords();}catch(e){}S.inSettle=false;}}
+if(out&&typeof MutationObserver!=='undefined'){SMO=new MutationObserver(function(){if(S.inSettle)return;clearTimeout(S.tm);
+  var t=Date.now();SN=SN.filter(function(x){return t-x<1000;});
+  if(W.__qaSettleMs||SN.length>=6){S.tm=setTimeout(settle,W.__qaSettleMs||60);return;}
+  SN.push(t);settleNow();});
+  SMO.observe(out,{childList:true,subtree:true});}
 var OFF=W.__qaOff||[];
 OFF.forEach(function(id){try{QA.pre.remove(id);}catch(e){}});
 out&&out.addEventListener('click',function(ev){var bt=ev.target.closest&&ev.target.closest('[data-fixundo]');if(!bt)return;ev.preventDefault();ev.stopPropagation();
@@ -12004,12 +12023,14 @@ W.__qaSay={card:function(c){ return sayFor(c);},line:function(kind,name){var c=D
     F.abilities.forEach(function (n) { add(n, 'ability', n); });
     F.status.forEach(function (s) { add(s.name, 'status', s.name); });
     F.loot.forEach(function (l) { add(l.name, 'loot', l); });
+    var om = {}, ol = [];
     Object.keys(F.renamed || {}).forEach(function (old) {
-      var g = clean(old), to = by[clean(F.renamed[old])];
-      if (!to || by[g] || g.length < 3) return;
-      by[g] = {form: g, flat: g.replace(/ /g, ''), names: to.names.slice()}; all.push(by[g]);
+      var g = clean(old), n = clean(F.renamed[old]);
+      if (!by[n] || by[g] || g.length < 3) return;
+      om[g] = n; ol.push(g.replace(/ /g, ' +'));
     });
-    IX = {by: by, all: all, long: all.slice().sort(function (x, y) { return y.form.length - x.form.length; })}; IXF = F;
+    var old = ol.length ? {re: new RegExp('(^| )(' + ol.join('|') + ')(?= |$)', 'g'), map: om} : null;
+    IX = {by: by, all: all, old: old, long: all.slice().sort(function (x, y) { return y.form.length - x.form.length; })}; IXF = F;
     return IX;
   }
   var LISTKIND = {place: 'place', gear: 'item', skill: 'item', stat: 'stat', term: 'term', ability: 'ability', status: 'status'};
@@ -12051,7 +12072,9 @@ W.__qaSay={card:function(c){ return sayFor(c);},line:function(kind,name){var c=D
   }
   function read(text, F, opt) {
     opt = opt || {};
-    var t = clean(text), w = t ? t.split(' ') : [], ix = index(F);
+    var ix = index(F), t = clean(text);
+    if (ix.old) t = t.replace(ix.old.re, function (m, p, g) { return p + ix.old.map[g.replace(/ +/g, ' ')]; });
+    var w = t ? t.split(' ') : [];
     var a = 0, b = w.length - 1;
     while (a <= b && QSET[w[a]]) a++;
     while (b >= a && QSET[w[b]]) b--;
